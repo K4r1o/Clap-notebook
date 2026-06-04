@@ -13,7 +13,7 @@
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
     <div class="app-container">
@@ -31,18 +31,64 @@
             <div class="notebooks-section">
                 <div class="section-title">
                     <span>我的筆記存檔</span>
-                    <button id="create-notebook-btn" class="btn-icon-add" title="新建筆記本">
-                        <i class="fa-solid fa-plus"></i>
-                    </button>
+                    <div class="section-title-actions">
+                        <button id="toggle-bulk-select-btn" class="btn-icon-add" title="批量操作">
+                            <i class="fa-solid fa-list-check"></i>
+                        </button>
+                        <button id="create-folder-btn" class="btn-icon-add normal-action-btn" title="新建資料夾">
+                            <i class="fa-solid fa-folder-plus"></i>
+                        </button>
+                        <button id="create-notebook-btn" class="btn-icon-add normal-action-btn" title="新建筆記本">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+                </div>
+                <!-- Inline Bulk Actions Toolbar -->
+                <div id="inline-bulk-toolbar" class="inline-bulk-toolbar" style="display: none;">
+                    <div class="inline-bulk-info">
+                        <i class="fa-solid fa-circle-info"></i> 已選取 <strong id="bulk-selected-count-floating">0</strong> 本
+                    </div>
+                    <div class="inline-bulk-actions">
+                        <button id="bulk-select-all-btn" class="btn-inline-action" title="全選/取消全選">
+                            <i class="fa-solid fa-square-check"></i> <span id="select-all-btn-text">全選</span>
+                        </button>
+                        <button id="bulk-rename-btn-floating" class="btn-inline-action" title="批量重命名">
+                            <i class="fa-solid fa-pen-to-square"></i> <span>命名</span>
+                        </button>
+                        <button id="bulk-clone-btn-floating" class="btn-inline-action" title="複製所選">
+                            <i class="fa-regular fa-copy"></i> <span>複製</span>
+                        </button>
+                        <button id="bulk-export-btn-floating" class="btn-inline-action" title="批量匯出 Markdown">
+                            <i class="fa-solid fa-download"></i> <span>匯出</span>
+                        </button>
+                        <button id="bulk-move-btn-floating" class="btn-inline-action action-blue" title="移至資料夾">
+                            <i class="fa-solid fa-folder-open"></i> <span>移動</span>
+                        </button>
+                        <button id="bulk-merge-btn-floating" class="btn-inline-action merge-btn action-purple" title="合併匯報 (AI)">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> <span>合併</span>
+                        </button>
+                        <button id="bulk-delete-btn-floating" class="btn-inline-action delete-btn action-red" title="刪除所選">
+                            <i class="fa-regular fa-trash-can"></i> <span>刪除</span>
+                        </button>
+                    </div>
+                    <div id="bulk-move-floating-select-container" class="inline-move-select" style="display: none;">
+                        <select id="bulk-move-folder-select-floating"></select>
+                        <button id="bulk-move-confirm-btn" class="btn-inline-confirm">確認</button>
+                    </div>
                 </div>
                 <ul id="notebooks-list" class="notebooks-list">
                     <!-- Dynamic notebooks list here -->
                 </ul>
+
             </div>
             
             <div class="sidebar-footer">
+                <button id="open-trash-btn" class="btn-settings-toggle" style="margin-bottom: 8px; background-color: rgba(255, 255, 255, 0.03);">
+                    <i class="fa-solid fa-trash-can"></i> 資源回收桶
+                    <span id="trash-badge" class="warning-dot" style="background-color: var(--accent-color); box-shadow: 0 0 8px var(--accent-color); display: none;"></span>
+                </button>
                 <button id="open-settings-btn" class="btn-settings-toggle">
-                    <i class="fa-solid fa-gear"></i> 設定 API 金鑰
+                    <i class="fa-solid fa-gear"></i> 系統與 AI 設定
                     <span id="api-warning-dot" class="warning-dot"></span>
                 </button>
                 <p>2026 © 隨身助理筆記本</p>
@@ -168,10 +214,214 @@
                     <button id="save-api-key-btn" class="btn btn-secondary modal-save-btn">儲存金鑰</button>
                     <p id="api-key-status" class="api-key-status"></p>
                 </div>
+                <hr class="modal-divider">
+                <div class="model-selection-container-modal">
+                    <label for="model-select" class="modal-label">
+                        <i class="fa-solid fa-brain"></i> AI 模型選擇
+                    </label>
+                    <p class="settings-tip">選擇您要使用的 AI 模型，下方會顯示該模型的額度與建議用途：</p>
+                    <div class="select-group-modal">
+                        <select id="model-select">
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash 🏆</option>
+                            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite</option>
+                            <option value="gemini-3-flash">Gemini 3 Flash (Preview)</option>
+                            <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash-Lite (Preview)</option>
+                            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                            <option value="gemma-2-27b-it">Gemma 3 / 4</option>
+                        </select>
+                    </div>
+                    <!-- Model details card -->
+                    <div id="model-details-card" class="model-details-card">
+                        <div class="model-details-row">
+                            <span class="detail-label"><i class="fa-solid fa-gauge-high"></i> 每分鐘上限 (RPM)</span>
+                            <span id="model-detail-rpm" class="detail-value">-</span>
+                        </div>
+                        <div class="model-details-row">
+                            <span class="detail-label"><i class="fa-solid fa-calendar-day"></i> 每日上限 (RPD)</span>
+                            <span id="model-detail-rpd" class="detail-value">-</span>
+                        </div>
+                        <div class="model-details-row remark-row">
+                            <span class="detail-label"><i class="fa-solid fa-circle-info"></i> 備註說明</span>
+                            <span id="model-detail-remark" class="detail-value">-</span>
+                        </div>
+                    </div>
+                </div>
+                <hr class="modal-divider">
+                <div class="theme-selection-container-modal">
+                    <label for="theme-select" class="modal-label">
+                        <i class="fa-solid fa-palette"></i> 擬真紙張主題
+                    </label>
+                    <p class="settings-tip">切換筆記本與工作區的視覺風格：</p>
+                    <div class="select-group-modal">
+                        <select id="theme-select">
+                            <option value="classic">溫暖風格：經典暖心象牙 (Ivory)</option>
+                            <option value="dark">低調內斂：護眼深色 (Dark)</option>
+                        </select>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <!-- Trash Modal -->
+    <div id="trash-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="width: 480px;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-trash-can"></i> 資源回收桶</h3>
+                <button id="close-trash-btn" class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="settings-tip">此處存放您已刪除的隨筆或筆記本，您可以選擇將其還原，或是永久刪除。</p>
+                
+                <div class="trash-tabs">
+                    <button id="tab-trash-entries" class="trash-tab-btn active">已刪除隨筆</button>
+                    <button id="tab-trash-notebooks" class="trash-tab-btn">已刪除筆記本</button>
+                </div>
+                
+                <div id="trash-list-container" class="trash-list-container">
+                    <!-- Dynamic list of deleted items -->
+                </div>
+                
+                <div class="trash-actions-footer">
+                    <button id="empty-trash-btn" class="btn btn-secondary" style="background-color: #d17a7a; color: white;">
+                        <i class="fa-solid fa-dumpster"></i> 清空回收桶
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Drag Ghost Badge -->
+    <div id="drag-ghost-badge" class="drag-ghost-badge" style="position: absolute; top: -1000px; left: -1000px; pointer-events: none;"></div>
+
+    <!-- Custom Right-Click Context Menu -->
+    <div id="custom-context-menu" class="custom-context-menu" style="display: none;">
+        <ul>
+            <li id="ctx-select-all"><i class="fa-solid fa-square-check"></i> <span id="ctx-select-all-text">全選/取消全選</span></li>
+            <li id="ctx-rename"><i class="fa-solid fa-pen-to-square"></i> 批量重新命名</li>
+            <li id="ctx-clone"><i class="fa-regular fa-copy"></i> 複製所選</li>
+            <li id="ctx-export"><i class="fa-solid fa-download"></i> 批量匯出 Markdown</li>
+            <li id="ctx-merge" class="ctx-highlight"><i class="fa-solid fa-wand-magic-sparkles"></i> 合併匯報 (AI)</li>
+            <li class="ctx-divider"></li>
+            <li id="ctx-delete" class="ctx-danger"><i class="fa-regular fa-trash-can"></i> 刪除所選</li>
+        </ul>
+    </div>
+
+    <!-- Bulk Merge & AI Report Options Modal -->
+    <div id="bulk-merge-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="width: 480px;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-wand-magic-sparkles"></i> AI 合併匯報設定</h3>
+                <button id="close-merge-modal-btn" class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="settings-tip">請選擇您希望合併產生的匯報格式與風格：</p>
+                
+                <div class="setting-item-modal">
+                    <label class="modal-label"><i class="fa-solid fa-file-invoice"></i> 匯報範本</label>
+                    <div class="select-group-modal">
+                        <select id="merge-template-select">
+                            <option value="standard" selected>📋 綜合整合工作報告 (概覽 + 重點 + 行動項)</option>
+                            <option value="kanban">📊 任務 Kanban 待辦清單 (提煉待辦任務)</option>
+                            <option value="comparison">🔍 跨項目對比分析 (分析各項目進度對比)</option>
+                            <option value="weekly">📰 極簡速報/週報 (提煉核心亮點)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="setting-item-modal" style="margin-top: 16px;">
+                    <label class="modal-label"><i class="fa-solid fa-comment-dots"></i> 助理語氣</label>
+                    <div class="select-group-modal">
+                        <select id="merge-tone-select">
+                            <option value="professional" selected>專業商務 (條理清晰、語氣專業)</option>
+                            <option value="friendly">親切貼心 (溫暖鼓勵、溫馨提示)</option>
+                            <option value="concise">極簡精確 (直奔重點、無冗餘修飾)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="setting-item-modal" style="margin-top: 16px;">
+                    <label class="modal-label"><i class="fa-solid fa-text-height"></i> 字數長度</label>
+                    <div class="select-group-modal">
+                        <select id="merge-length-select">
+                            <option value="short">簡短 (300-500 字)</option>
+                            <option value="medium" selected>中等 (800-1200 字)</option>
+                            <option value="long">詳細 (1500+ 字)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="modal-footer-actions" style="margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px;">
+                    <button id="cancel-merge-modal-btn" class="btn btn-secondary" style="background-color: var(--input-bg); color: var(--ink-color);">取消</button>
+                    <button id="confirm-merge-modal-btn" class="btn btn-primary" style="background-color: #6c5ce7; border-color: #6c5ce7;"><i class="fa-solid fa-circle-check"></i> 開始合併生成</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Rename Options Modal -->
+    <div id="bulk-rename-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="width: 440px;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-pen-to-square"></i> 批量重新命名</h3>
+                <button id="close-rename-modal-btn" class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <p class="settings-tip">設定命名規則以套用至已勾選的筆記本：</p>
+                
+                <div class="rename-rules">
+                    <div class="rename-option-group" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px;">
+                        <label style="font-weight: 600; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                            <input type="radio" name="rename-mode" value="prefix-suffix" checked> 增加前綴/後綴
+                        </label>
+                        <div class="rename-inputs" id="prefix-suffix-inputs" style="display: flex; flex-direction: column; gap: 8px; padding-left: 20px;">
+                            <input type="text" id="rename-prefix" placeholder="前綴，例如：[工作]" class="modal-text-input">
+                            <input type="text" id="rename-suffix" placeholder="後綴，例如：-已完成" class="modal-text-input">
+                        </div>
+                    </div>
+                    
+                    <div class="rename-option-group" style="margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px;">
+                        <label style="font-weight: 600; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                            <input type="radio" name="rename-mode" value="replace"> 字串取代
+                        </label>
+                        <div class="rename-inputs" id="replace-inputs" style="display: flex; flex-direction: column; gap: 8px; padding-left: 20px; opacity: 0.5;">
+                            <input type="text" id="rename-find" placeholder="尋找文字" class="modal-text-input" disabled>
+                            <input type="text" id="rename-replace" placeholder="取代為" class="modal-text-input" disabled>
+                        </div>
+                    </div>
+                    
+                    <div class="rename-option-group" style="display: flex; flex-direction: column; gap: 6px;">
+                        <label style="font-weight: 600; font-size: 0.9rem; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+                            <input type="radio" name="rename-mode" value="series"> 序列編號命名
+                        </label>
+                        <div class="rename-inputs" id="series-inputs" style="display: flex; flex-direction: column; gap: 8px; padding-left: 20px; opacity: 0.5;">
+                            <input type="text" id="rename-base" placeholder="基本名稱，例如：工作週記" class="modal-text-input" disabled>
+                            <p class="settings-tip" style="margin: 0; font-size: 0.75rem;">重新命名為：名稱_01、名稱_02...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="modal-footer-actions" style="margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px;">
+                    <button id="cancel-rename-modal-btn" class="btn btn-secondary" style="background-color: var(--input-bg); color: var(--ink-color);">取消</button>
+                    <button id="confirm-rename-modal-btn" class="btn btn-primary">確認修改</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Undo Toast -->
+    <div id="undo-toast" class="undo-toast" style="display: none;">
+        <div class="undo-toast-content">
+            <span id="undo-toast-message">批量操作成功！</span>
+            <button id="undo-toast-btn" class="undo-toast-btn">復原</button>
+        </div>
+        <div class="undo-toast-progress">
+            <div id="undo-toast-progress-fill" class="undo-toast-progress-fill"></div>
+        </div>
+    </div>
+
+    <script src="app.js?v=2"></script>
 </body>
 </html>
