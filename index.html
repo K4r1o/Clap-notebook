@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>隨身助理筆記本 - 溫暖紙張風格</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+TC:wght@300;400;500;700&family=Kalam:wght@300;400;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <i class="fa-solid fa-book-open logo-icon"></i>
+                <h1>隨心筆記本</h1>
+                <p class="subtitle">您的 AI 隨身祕書</p>
+            </div>
+
+
+
+            <!-- Notebooks Management -->
+            <div class="notebooks-section">
+                <div class="section-title">
+                    <span>我的筆記存檔</span>
+                    <button id="create-notebook-btn" class="btn-icon-add" title="新建筆記本">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+                <ul id="notebooks-list" class="notebooks-list">
+                    <!-- Dynamic notebooks list here -->
+                </ul>
+            </div>
+            
+            <div class="sidebar-footer">
+                <button id="open-settings-btn" class="btn-settings-toggle">
+                    <i class="fa-solid fa-gear"></i> 設定 API 金鑰
+                    <span id="api-warning-dot" class="warning-dot"></span>
+                </button>
+                <p>2026 © 隨身助理筆記本</p>
+            </div>
+        </aside>
+
+        <!-- Main Panel -->
+        <main class="main-panel">
+            <!-- Empty State -->
+            <div id="empty-state" class="empty-state">
+                <div class="empty-state-content">
+                    <i class="fa-solid fa-pen-nib empty-icon"></i>
+                    <h2>開啟一本新筆記</h2>
+                    <p>請在左側選擇已有的筆記本，或點擊 <i class="fa-solid fa-plus"></i> 新增筆記本開始紀錄您的思緒。</p>
+                </div>
+            </div>
+
+            <!-- Active Notebook Workspace -->
+            <div id="workspace" class="workspace" style="display: none;">
+                <!-- Workspace Header -->
+                <header class="workspace-header">
+                    <div class="notebook-info">
+                        <div class="title-edit-container">
+                            <h2 id="current-notebook-title" contenteditable="true" title="點擊編輯標題"></h2>
+                            <i class="fa-solid fa-pen title-edit-icon"></i>
+                        </div>
+                        <div class="notebook-meta">
+                            <span class="meta-item"><i class="fa-regular fa-clock"></i> 建立於 <span id="current-notebook-time"></span></span>
+                            <span id="current-notebook-status" class="status-badge status-active">筆記中</span>
+                        </div>
+                    </div>
+                    
+                    <div class="workspace-actions">
+                        <button id="finalize-btn" class="btn btn-primary">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> 結束筆記並生成匯報
+                        </button>
+                    </div>
+                </header>
+
+                <!-- Lined Paper Workspace Body -->
+                <div class="workspace-body">
+                    <!-- Notes Entries Area (Lined Paper Style) -->
+                    <div class="paper-container">
+                        <div class="notebook-paper">
+                            <!-- Paper binder spirals -->
+                            <div class="paper-spirals"></div>
+                            
+                            <!-- Notebook lines and content -->
+                            <div class="paper-content">
+                                <div id="entries-container" class="entries-container">
+                                    <!-- Dynamic entries here -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Note Input area (floating over paper bottom) -->
+                        <div class="note-input-container">
+                            <textarea id="note-textarea" placeholder="在此隨機輸入您想記下來的東西... (按下 Enter 發送，Shift+Enter 換行)" rows="3"></textarea>
+                            <button id="send-note-btn" class="btn-send" title="新增隨筆">
+                                <i class="fa-solid fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Assistant Report Panel (Markdown Paper style) -->
+                    <div id="report-panel" class="report-panel" style="display: none;">
+                        <div class="report-paper">
+                            <div class="report-header">
+                                <div class="report-title">
+                                    <i class="fa-solid fa-user-tie"></i> 隨身助理工作匯報
+                                </div>
+                                <div class="report-actions">
+                                    <button id="copy-report-btn" class="btn-report-action" title="一鍵複製">
+                                        <i class="fa-regular fa-copy"></i> 複製內容
+                                    </button>
+                                    <button id="download-report-btn" class="btn-report-action" title="下載文字檔">
+                                        <i class="fa-solid fa-download"></i> 下載檔案
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="report-content" class="report-content markdown-body">
+                                <!-- Rendered Markdown report here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Global Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loader-container">
+            <div class="assistant-avatar">
+                <i class="fa-solid fa-user-astronaut animate-bounce"></i>
+            </div>
+            <div class="spinner"></div>
+            <h3>您的隨身助理正在閱讀筆記...</h3>
+            <p>整理條理、邏輯重組，撰寫專業工作匯報中，請稍候片刻...</p>
+            <div class="loading-progress-bar">
+                <div class="loading-progress-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-gear"></i> 系統設定</h3>
+                <button id="close-settings-btn" class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="api-key-container-modal">
+                    <label for="api-key-input" class="modal-label">
+                        <i class="fa-solid fa-key"></i> Gemini API Key 設定
+                    </label>
+                    <p class="settings-tip">請至 <a href="https://aistudio.google.com/" target="_blank">Google AI Studio</a> 申請免費金鑰，儲存後即可使用隨身助理整理功能。</p>
+                    <div class="input-group-modal">
+                        <input type="password" id="api-key-input" placeholder="輸入 API 金鑰..." autocomplete="off">
+                        <button id="toggle-api-key-btn" title="顯示/隱藏"><i class="fa-solid fa-eye-slash"></i></button>
+                    </div>
+                    <button id="save-api-key-btn" class="btn btn-secondary modal-save-btn">儲存金鑰</button>
+                    <p id="api-key-status" class="api-key-status"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
