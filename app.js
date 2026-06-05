@@ -2757,6 +2757,47 @@ document.addEventListener('DOMContentLoaded', () => {
             forcePullBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> 從雲端下載最新資料';
         });
     }
+    
+    const googleLogoutBtn = document.getElementById('google-logout-btn');
+    if (googleLogoutBtn) {
+        googleLogoutBtn.addEventListener('click', () => {
+            if (!confirm('確定要登出 Google 帳號嗎？登出後將返回登入畫面，本機資料仍會保留。')) return;
+            
+            // Revoke Google OAuth token
+            if (googleAccessToken) {
+                try {
+                    google.accounts.oauth2.revoke(googleAccessToken, () => {
+                        console.log('Google Access Token Revoked');
+                    });
+                } catch (e) {
+                    console.error('Error revoking Google Access Token:', e);
+                }
+            }
+            
+            // Clear credentials and variables
+            googleAccessToken = null;
+            tokenExpiryTime = null;
+            hasLoadedCloudThisSession = false;
+            
+            localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN);
+            localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY);
+            sessionStorage.removeItem(SESSION_KEY);
+            
+            // Update UI status
+            updateGoogleSyncStatus('已登出 Google 帳號。', false);
+            if (syncStatusBadge) {
+                syncStatusBadge.className = 'sync-badge local';
+                syncStatusBadge.innerHTML = '<i class="fa-solid fa-folder"></i> 本地儲存';
+            }
+            
+            // Hide settings modal and show login overlay
+            const settingsModal = document.getElementById('settings-modal');
+            if (settingsModal) settingsModal.style.display = 'none';
+            
+            const overlay = document.getElementById('login-overlay');
+            if (overlay) overlay.style.display = 'flex';
+        });
+    }
 });
 
 async function loadFromGoogleDrive() {
@@ -2777,7 +2818,14 @@ async function loadFromGoogleDrive() {
                 alt: 'media'
             });
             
-            const data = fileRes.result;
+            let data = fileRes.result;
+            if (typeof data === 'string') {
+                try {
+                    data = JSON.parse(data);
+                } catch (e) {
+                    console.error("JSON parsing of downloaded data failed:", e);
+                }
+            }
             if (data) {
                 if (data.subjects) subjects = data.subjects;
                 if (data.notebooks) notebooks = data.notebooks;
