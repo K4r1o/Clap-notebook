@@ -529,19 +529,16 @@ input, textarea, [contenteditable="true"], .report-content, .paper-content, #das
     font-weight: bold;
 }
 
-.notebooks-list li.active .badge-status {
-    background-color: rgba(46, 36, 31, 0.15);
-    color: #2e241f;
+/* Active / 筆記中: Red */
+.notebooks-list .badge-status.status-active {
+    background-color: rgba(239, 83, 80, 0.2);
+    color: #ef5350;
 }
 
-.notebooks-list li:not(.active) .badge-status.status-active {
-    background-color: rgba(142, 208, 129, 0.15);
-    color: #8ed081;
-}
-
-.notebooks-list li:not(.active) .badge-status.status-finalized {
-    background-color: rgba(180, 138, 96, 0.15);
-    color: var(--sidebar-accent);
+/* Finalized / 已整理: Green */
+.notebooks-list .badge-status.status-finalized {
+    background-color: rgba(129, 199, 132, 0.2);
+    color: #81c784;
 }
 
 .btn-delete-notebook {
