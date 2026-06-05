@@ -3532,21 +3532,32 @@ if (mobileNavBackdrop) mobileNavBackdrop.addEventListener('click', closeMobileNa
 
 // Touch Swipe Gestures for Discord-style Sidebar
 let touchStartX = 0;
+let touchStartY = 0;
+
 document.addEventListener('touchstart', e => {
-    touchStartX = e.changedTouches[0].screenX;
+    touchStartX = e.changedTouches[0].clientX;
+    touchStartY = e.changedTouches[0].clientY;
 }, { passive: true });
 
 document.addEventListener('touchend', e => {
-    let touchEndX = e.changedTouches[0].screenX;
-    const swipeThreshold = 50; // minimum distance
+    let touchEndX = e.changedTouches[0].clientX;
+    let touchEndY = e.changedTouches[0].clientY;
     
-    // Swipe Right to Open (Only if started near left edge)
-    if (touchEndX - touchStartX > swipeThreshold && touchStartX < 40) {
-        document.body.classList.add('mobile-nav-open');
-    }
+    let diffX = touchEndX - touchStartX;
+    let diffY = touchEndY - touchStartY;
     
-    // Swipe Left to Close
-    if (touchStartX - touchEndX > swipeThreshold && document.body.classList.contains('mobile-nav-open')) {
-        closeMobileNav();
+    // Ensure it's mostly a horizontal swipe, not a vertical scroll
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+        const swipeThreshold = 50; // minimum distance
+        
+        // Swipe Right to Open (Allow anywhere on screen like Discord)
+        if (diffX > swipeThreshold) {
+            document.body.classList.add('mobile-nav-open');
+        }
+        
+        // Swipe Left to Close
+        if (diffX < -swipeThreshold && document.body.classList.contains('mobile-nav-open')) {
+            closeMobileNav();
+        }
     }
 }, { passive: true });
