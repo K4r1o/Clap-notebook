@@ -107,9 +107,6 @@
                 <div class="section-title">
                     <span>我的筆記存檔</span>
                     <div class="section-title-actions">
-                        <button id="toggle-bulk-select-btn" class="btn-icon-add" title="批量操作">
-                            <i class="fa-solid fa-list-check"></i>
-                        </button>
                         <button id="create-folder-btn" class="btn-icon-add normal-action-btn" title="新建資料夾">
                             <i class="fa-solid fa-folder-plus"></i>
                         </button>
@@ -597,6 +594,11 @@
         </div>
     </div>
 
+    <!-- Global Context Menu -->
+    <div id="global-context-menu" class="dropdown-menu" style="display: none; position: fixed; z-index: 2000; background: var(--sidebar-bg); border: 1px solid var(--sidebar-border); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); padding: 6px 0; min-width: 150px;">
+        <div id="context-menu-content"></div>
+    </div>
+    
     <script src="app.js?v=19"></script>
     <!-- PWA Service Worker Registration -->
     <script>

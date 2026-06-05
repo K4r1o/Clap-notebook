@@ -736,6 +736,11 @@ function renderNotebooksList() {
             selectFolderForDashboard(folder.id);
         });
         
+        // Bind Context Menu
+        if (typeof bindContextMenuEvents === 'function') {
+            bindContextMenuEvents(folderHeader, 'folder', folder.id, folder.name);
+        }
+        
         // Drag and drop listeners on folder header
         folderHeader.addEventListener('dragover', (e) => {
             e.preventDefault(); // Required to allow drop
@@ -940,6 +945,11 @@ function createNotebookLI(notebook) {
         handleCheckboxClick(e, notebook.id);
     });
     
+    // Bind Context Menu
+    if (typeof bindContextMenuEvents === 'function') {
+        bindContextMenuEvents(li, 'notebook', notebook.id, notebook.title);
+    }
+    
     // Select Notebook click
     li.addEventListener('click', (e) => {
         // If clicking actions or checkbox, do nothing
@@ -1120,27 +1130,32 @@ let bulkSelectTimeout1 = null;
 let bulkSelectTimeout2 = null;
 
 // Toggle Bulk Selection Mode
-function toggleBulkSelect() {
-    isBulkSelectMode = !isBulkSelectMode;
+function toggleBulkSelect(initialId = null) {
+    if (!isBulkSelectMode && initialId) {
+        isBulkSelectMode = true;
+    } else {
+        isBulkSelectMode = !isBulkSelectMode;
+    }
+    
     selectedNotebookIds.clear();
     lastCheckedId = null;
     
+    if (initialId && isBulkSelectMode) {
+        selectedNotebookIds.add(initialId);
+        lastCheckedId = initialId;
+    }
+    
     const body = document.body;
     const panel = document.getElementById('inline-bulk-toolbar');
-    const toggleBtn = document.getElementById('toggle-bulk-select-btn');
     const normalBtns = document.querySelectorAll('.normal-action-btn');
     
     if (isBulkSelectMode) {
         body.classList.add('body-bulk-select');
         if (panel) panel.style.display = 'flex';
-        toggleBtn.style.color = 'var(--sidebar-accent)';
-        toggleBtn.style.backgroundColor = 'var(--sidebar-hover)';
         normalBtns.forEach(btn => btn.style.display = 'none');
     } else {
         body.classList.remove('body-bulk-select');
         if (panel) panel.style.display = 'none';
-        toggleBtn.style.color = '';
-        toggleBtn.style.backgroundColor = '';
         const moveSelect = document.getElementById('bulk-move-floating-select-container');
         if (moveSelect) moveSelect.style.display = 'none';
         normalBtns.forEach(btn => btn.style.display = 'inline-flex');
@@ -3645,4 +3660,221 @@ function updateGreeting() {
     if (greetingEl) {
         greetingEl.textContent = randomGreeting;
     }
+}
+
+// ==========================================
+// Floating Context Menu Logic
+// ==========================================
+function showContextMenu(x, y, type, id, name) {
+    const menu = document.getElementById('global-context-menu');
+    const content = document.getElementById('context-menu-content');
+    if (!menu || !content) return;
+    
+    // Clear old items
+    content.innerHTML = '';
+    
+    if (type === 'notebook') {
+        const title = document.createElement('div');
+        title.style.padding = '4px 16px 8px';
+        title.style.fontSize = '0.75rem';
+        title.style.color = 'var(--ink-muted)';
+        title.style.borderBottom = '1px solid var(--sidebar-hover)';
+        title.style.marginBottom = '4px';
+        title.style.whiteSpace = 'nowrap';
+        title.style.overflow = 'hidden';
+        title.style.textOverflow = 'ellipsis';
+        title.textContent = `筆記本: ${name}`;
+        content.appendChild(title);
+        
+        // 批量操作
+        const bulkBtn = document.createElement('button');
+        bulkBtn.className = 'context-menu-item';
+        bulkBtn.innerHTML = `<i class="fa-solid fa-list-check" style="width: 14px;"></i> 批量多選`;
+        bulkBtn.onclick = () => {
+            menu.style.display = 'none';
+            toggleBulkSelect(id);
+        };
+        content.appendChild(bulkBtn);
+        
+        // 重新命名
+        const renameBtn = document.createElement('button');
+        renameBtn.className = 'context-menu-item';
+        renameBtn.innerHTML = `<i class="fa-solid fa-pen" style="width: 14px;"></i> 重新命名`;
+        renameBtn.onclick = () => {
+            menu.style.display = 'none';
+            const li = document.querySelector(`.notebook-item[data-id="${id}"]`);
+            if (li) {
+                const titleSpan = li.querySelector('.notebook-item-title');
+                if (titleSpan) {
+                    titleSpan.click();
+                    const dblClickEvent = new MouseEvent('dblclick', { bubbles: true });
+                    titleSpan.dispatchEvent(dblClickEvent);
+                }
+            }
+        };
+        content.appendChild(renameBtn);
+        
+        // 移動
+        const moveBtn = document.createElement('button');
+        moveBtn.className = 'context-menu-item action-blue';
+        moveBtn.innerHTML = `<i class="fa-solid fa-folder-open" style="width: 14px;"></i> 移至資料夾`;
+        moveBtn.onclick = () => {
+            menu.style.display = 'none';
+            // Emulate click on notebook first
+            const li = document.querySelector(`.notebook-item[data-id="${id}"]`);
+            if (li) li.click();
+            setTimeout(() => {
+                const workspaceMoveBtn = document.getElementById('move-notebook-btn');
+                if (workspaceMoveBtn) workspaceMoveBtn.click();
+            }, 50);
+        };
+        content.appendChild(moveBtn);
+        
+        // 刪除
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'context-menu-item danger';
+        deleteBtn.innerHTML = `<i class="fa-solid fa-trash-can" style="width: 14px;"></i> 刪除`;
+        deleteBtn.onclick = () => {
+            menu.style.display = 'none';
+            if (confirm(`確定要將筆記本「${name}」移至資源回收桶嗎？`)) {
+                deleteNotebook(id);
+            }
+        };
+        content.appendChild(deleteBtn);
+        
+    } else if (type === 'folder') {
+        const title = document.createElement('div');
+        title.style.padding = '4px 16px 8px';
+        title.style.fontSize = '0.75rem';
+        title.style.color = 'var(--ink-muted)';
+        title.style.borderBottom = '1px solid var(--sidebar-hover)';
+        title.style.marginBottom = '4px';
+        title.style.whiteSpace = 'nowrap';
+        title.style.overflow = 'hidden';
+        title.style.textOverflow = 'ellipsis';
+        title.textContent = `資料夾: ${name}`;
+        content.appendChild(title);
+        
+        // 選擇內部筆記
+        const bulkBtn = document.createElement('button');
+        bulkBtn.className = 'context-menu-item';
+        bulkBtn.innerHTML = `<i class="fa-solid fa-list-check" style="width: 14px;"></i> 選擇內部筆記`;
+        bulkBtn.onclick = () => {
+            menu.style.display = 'none';
+            const folderNotebooks = notebooks.filter(n => n.folderId === id);
+            if (folderNotebooks.length > 0) {
+                if (!isBulkSelectMode) toggleBulkSelect(folderNotebooks[0].id);
+                folderNotebooks.forEach(n => selectedNotebookIds.add(n.id));
+                updateBulkActionsPanel();
+                renderNotebooksList();
+            } else {
+                alert('此資料夾內沒有筆記本可選取。');
+            }
+        };
+        content.appendChild(bulkBtn);
+
+        // 重新命名
+        const renameBtn = document.createElement('button');
+        renameBtn.className = 'context-menu-item';
+        renameBtn.innerHTML = `<i class="fa-solid fa-pen" style="width: 14px;"></i> 重新命名`;
+        renameBtn.onclick = () => {
+            menu.style.display = 'none';
+            const folderEl = document.querySelector(`.folder-item[data-id="${id}"]`);
+            if (folderEl) {
+                const titleSpan = folderEl.querySelector('.folder-name-text');
+                if (titleSpan) {
+                    const dblClickEvent = new MouseEvent('dblclick', { bubbles: true });
+                    titleSpan.dispatchEvent(dblClickEvent);
+                }
+            }
+        };
+        content.appendChild(renameBtn);
+        
+        // 刪除
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'context-menu-item danger';
+        deleteBtn.innerHTML = `<i class="fa-solid fa-trash-can" style="width: 14px;"></i> 刪除資料夾`;
+        deleteBtn.onclick = () => {
+            menu.style.display = 'none';
+            if (confirm(`確定要刪除資料夾「${name}」嗎？（資料夾內的筆記本將會被移出至未分類）`)) {
+                const index = folders.findIndex(f => f.id === id);
+                if (index > -1) {
+                    folders.splice(index, 1);
+                    notebooks.forEach(n => {
+                        if (n.folderId === id) n.folderId = null;
+                    });
+                    if (currentFolderId === id) {
+                        currentFolderId = null;
+                    }
+                    saveFoldersToStorage();
+                    saveNotebooksToStorage();
+                    renderNotebooksList();
+                    updateWorkspaceView();
+                }
+            }
+        };
+        content.appendChild(deleteBtn);
+    }
+    
+    // Position menu
+    menu.style.display = 'block';
+    
+    // Adjust if it goes off screen
+    const rect = menu.getBoundingClientRect();
+    let left = x;
+    let top = y;
+    
+    if (left + rect.width > window.innerWidth) {
+        left = window.innerWidth - rect.width - 10;
+    }
+    if (top + rect.height > window.innerHeight) {
+        top = window.innerHeight - rect.height - 10;
+    }
+    
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+}
+
+// Global click listener to close menu
+document.addEventListener('click', (e) => {
+    const menu = document.getElementById('global-context-menu');
+    if (menu && menu.style.display === 'block') {
+        if (!menu.contains(e.target)) {
+            menu.style.display = 'none';
+        }
+    }
+});
+
+function bindContextMenuEvents(element, type, id, name) {
+    let pressTimer;
+    
+    // Desktop Right Click
+    element.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const originalBg = element.style.backgroundColor;
+        element.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+        setTimeout(() => element.style.backgroundColor = originalBg, 200);
+        
+        showContextMenu(e.clientX, e.clientY, type, id, name);
+    });
+
+    // Mobile Long Press
+    element.addEventListener('touchstart', (e) => {
+        pressTimer = setTimeout(() => {
+            const touch = e.touches[0];
+            
+            const originalBg = element.style.backgroundColor;
+            element.style.backgroundColor = 'rgba(255, 255, 255, 0.05)';
+            setTimeout(() => element.style.backgroundColor = originalBg, 200);
+            
+            if (navigator.vibrate) navigator.vibrate(50);
+            showContextMenu(touch.clientX, touch.clientY, type, id, name);
+        }, 500);
+    }, {passive: true});
+
+    element.addEventListener('touchend', () => clearTimeout(pressTimer));
+    element.addEventListener('touchmove', () => clearTimeout(pressTimer));
+    element.addEventListener('touchcancel', () => clearTimeout(pressTimer));
 }
