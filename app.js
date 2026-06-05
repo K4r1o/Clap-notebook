@@ -1049,13 +1049,38 @@ function toggleFolderCollapse(id) {
 }
 
 // Rename Folder
+// Folder name validation
+function validateFolderName(name) {
+    if (!name || name.trim() === '') {
+        return { valid: false, reason: '資料夾名稱不能為空白。' };
+    }
+    const trimmed = name.trim();
+    if (trimmed.length > 50) {
+        return { valid: false, reason: '資料夾名稱不能超過 50 個字元。' };
+    }
+    // Forbidden characters: / \ : * ? " < > | # % & { } ^ ~ ` ; = + @ $ !
+    const forbidden = /[\/\\:*?"<>|#%&{}^~`;=+@$!]/;
+    if (forbidden.test(trimmed)) {
+        return { valid: false, reason: '資料夾名稱不能包含下列特殊符號：\n/ \\ : * ? " < > | # % & { } ^ ~ ` ; = + @ $ !' };
+    }
+    // Cannot start or end with a space or period
+    if (/^[.\s]|[.\s]$/.test(trimmed)) {
+        return { valid: false, reason: '資料夾名稱不能以空格或句點開頭／結尾。' };
+    }
+    return { valid: true, name: trimmed };
+}
+
 function renameFolder(id, newName) {
     const folder = folders.find(f => f.id === id);
-    if (folder && newName && folder.name !== newName) {
-        folder.name = newName;
+    const validation = validateFolderName(newName);
+    if (folder && validation.valid && folder.name !== validation.name) {
+        folder.name = validation.name;
         saveFoldersToStorage();
         renderNotebooksList();
         updateBulkMoveSelectOptions();
+    } else if (!validation.valid && newName && newName.trim() !== '') {
+        alert(`命名格式錯誤：${validation.reason}`);
+        renderNotebooksList(); // Reset UI
     } else {
         renderNotebooksList(); // Reset UI if empty or no change
     }
