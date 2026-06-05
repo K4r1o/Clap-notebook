@@ -871,6 +871,11 @@ function renderNotebooksList() {
             notebooksList.appendChild(li);
         });
     }
+    
+    // Ensure bulk move dropdown is updated
+    if (typeof updateMoveFolderSelect === 'function') {
+        updateMoveFolderSelect();
+    }
 }
 
 // Create single notebook LI element
@@ -1162,6 +1167,18 @@ function toggleBulkSelect(initialId = null) {
     }
     updateBulkActionsPanel();
     renderNotebooksList();
+}
+
+// Update move folder select
+function updateMoveFolderSelect() {
+    const select = document.getElementById('bulk-move-folder-select-floating');
+    if (!select) return;
+    
+    select.innerHTML = '<option value="">-- 移至未分類區域 --</option>';
+    const subjectFolders = folders.filter(f => f.subjectId === currentSubjectId);
+    subjectFolders.forEach(folder => {
+        select.innerHTML += `<option value="${folder.id}">${escapeHtml(folder.name)}</option>`;
+    });
 }
 
 // Update the Bulk Actions UI panel counts
@@ -3720,12 +3737,16 @@ function showContextMenu(x, y, type, id, name) {
         moveBtn.innerHTML = `<i class="fa-solid fa-folder-open" style="width: 14px;"></i> 移至資料夾`;
         moveBtn.onclick = () => {
             menu.style.display = 'none';
-            // Emulate click on notebook first
-            const li = document.querySelector(`.notebook-item[data-id="${id}"]`);
-            if (li) li.click();
+            if (!isBulkSelectMode) {
+                toggleBulkSelect(id);
+            } else {
+                selectedNotebookIds.add(id);
+                updateBulkActionsPanel();
+                renderNotebooksList();
+            }
             setTimeout(() => {
-                const workspaceMoveBtn = document.getElementById('move-notebook-btn');
-                if (workspaceMoveBtn) workspaceMoveBtn.click();
+                const bulkMoveBtn = document.getElementById('bulk-move-btn-floating');
+                if (bulkMoveBtn) bulkMoveBtn.click();
             }, 50);
         };
         content.appendChild(moveBtn);
