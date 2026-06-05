@@ -171,26 +171,25 @@
                 </header>
                 <div class="dashboard-body" style="display: flex; flex-direction: column; gap: 24px; flex-grow: 1;">
                     <!-- Stat cards -->
-                    <div class="dashboard-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
+                    <div class="dashboard-stats" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
                         <div class="stat-card" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--report-border); border-radius: var(--border-radius); padding: 16px; display: flex; align-items: center; gap: 12px;">
-                            <i class="fa-solid fa-folder-open" style="font-size: 2rem; color: var(--accent-color); opacity: 0.8;"></i>
+                            <i class="fa-solid fa-folder-open" style="font-size: 2.2rem; color: var(--accent-color); opacity: 0.8;"></i>
                             <div class="stat-info" style="display: flex; flex-direction: column;">
                                 <span class="stat-num" id="stat-folders-count" style="font-size: 1.5rem; font-weight: 700; color: var(--ink-color);">0</span>
-                                <span class="stat-label" style="font-size: 0.8rem; color: var(--ink-muted);">資料夾</span>
+                                <span class="stat-label" style="font-size: 0.8rem; color: var(--ink-muted); font-weight: 500;">資料夾</span>
                             </div>
                         </div>
                         <div class="stat-card" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--report-border); border-radius: var(--border-radius); padding: 16px; display: flex; align-items: center; gap: 12px;">
-                            <i class="fa-solid fa-book-bookmark" style="font-size: 2rem; color: var(--accent-color); opacity: 0.8;"></i>
-                            <div class="stat-info" style="display: flex; flex-direction: column;">
-                                <span class="stat-num" id="stat-notebooks-count" style="font-size: 1.5rem; font-weight: 700; color: var(--ink-color);">0</span>
-                                <span class="stat-label" style="font-size: 0.8rem; color: var(--ink-muted);">筆記本</span>
-                            </div>
-                        </div>
-                        <div class="stat-card" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--report-border); border-radius: var(--border-radius); padding: 16px; display: flex; align-items: center; gap: 12px;">
-                            <i class="fa-solid fa-pen-fancy" style="font-size: 2rem; color: var(--accent-color); opacity: 0.8;"></i>
-                            <div class="stat-info" style="display: flex; flex-direction: column;">
-                                <span class="stat-num" id="stat-entries-count" style="font-size: 1.5rem; font-weight: 700; color: var(--ink-color);">0</span>
-                                <span class="stat-label" style="font-size: 0.8rem; color: var(--ink-muted);">隨筆筆記</span>
+                            <i class="fa-solid fa-pen-fancy" style="font-size: 2.2rem; color: var(--accent-color); opacity: 0.8;"></i>
+                            <div class="stat-info" style="display: flex; flex-direction: column; flex-grow: 1;">
+                                <div style="display: flex; align-items: baseline; gap: 8px;">
+                                    <span class="stat-num" id="stat-entries-count" style="font-size: 1.5rem; font-weight: 700; color: var(--ink-color);">0</span>
+                                    <span class="stat-label" style="font-size: 0.8rem; color: var(--ink-muted); font-weight: 500;">隨筆筆記</span>
+                                </div>
+                                <div class="stat-sub-info" style="display: flex; gap: 10px; font-size: 0.75rem; color: var(--ink-muted); margin-top: 4px; border-top: 1px dashed var(--report-border); padding-top: 4px;">
+                                    <span>筆記中: <strong id="stat-entries-active-count" style="color: var(--accent-color);">0</strong></span>
+                                    <span>已整理: <strong id="stat-entries-finalized-count" style="color: #2e7d32;">0</strong></span>
+                                </div>
                             </div>
                         </div>
                     </div>

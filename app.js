@@ -3011,6 +3011,8 @@ function showDashboard(type, id) {
     let foldersCount = 0;
     let notebooksCount = 0;
     let entriesCount = 0;
+    let activeEntriesCount = 0;
+    let finalizedEntriesCount = 0;
     
     if (type === 'subject') {
         const subject = subjects.find(s => s.id === id);
@@ -3029,7 +3031,12 @@ function showDashboard(type, id) {
         const subEntries = entries.filter(e => notebookIds.has(e.notebook_id));
         entriesCount = subEntries.length;
         
-        document.getElementById('dashboard-meta').textContent = `包含 ${foldersCount} 個資料夾，${notebooksCount} 本筆記本，${entriesCount} 條隨筆`;
+        const activeNotebooks = subNotebooks.filter(n => n.status !== 'finalized');
+        const finalizedNotebooks = subNotebooks.filter(n => n.status === 'finalized');
+        activeEntriesCount = subEntries.filter(e => activeNotebooks.some(n => n.id === e.notebook_id)).length;
+        finalizedEntriesCount = subEntries.filter(e => finalizedNotebooks.some(n => n.id === e.notebook_id)).length;
+        
+        document.getElementById('dashboard-meta').textContent = `包含 ${foldersCount} 個資料夾，${entriesCount} 條隨筆`;
         
         const aiBtn = document.getElementById('dashboard-ai-btn');
         aiBtn.onclick = () => generateSubjectReport(id);
@@ -3050,13 +3057,29 @@ function showDashboard(type, id) {
         const folderEntries = entries.filter(e => notebookIds.has(e.notebook_id));
         entriesCount = folderEntries.length;
         
-        document.getElementById('dashboard-meta').textContent = `包含 ${notebooksCount} 本筆記本，${entriesCount} 條隨筆`;
+        const activeNotebooks = folderNotebooks.filter(n => n.status !== 'finalized');
+        const finalizedNotebooks = folderNotebooks.filter(n => n.status === 'finalized');
+        activeEntriesCount = folderEntries.filter(e => activeNotebooks.some(n => n.id === e.notebook_id)).length;
+        finalizedEntriesCount = folderEntries.filter(e => finalizedNotebooks.some(n => n.id === e.notebook_id)).length;
+        
+        document.getElementById('dashboard-meta').textContent = `包含 ${entriesCount} 條隨筆`;
         
         const aiBtn = document.getElementById('dashboard-ai-btn');
         aiBtn.onclick = () => generateFolderReport(id);
     }
     
     document.getElementById('dashboard-title').textContent = title;
+    
+    // Update dashboard statistics cards
+    const foldersCountEl = document.getElementById('stat-folders-count');
+    const entriesCountEl = document.getElementById('stat-entries-count');
+    const activeEntriesEl = document.getElementById('stat-entries-active-count');
+    const finalizedEntriesEl = document.getElementById('stat-entries-finalized-count');
+    
+    if (foldersCountEl) foldersCountEl.textContent = foldersCount;
+    if (entriesCountEl) entriesCountEl.textContent = entriesCount;
+    if (activeEntriesEl) activeEntriesEl.textContent = activeEntriesCount;
+    if (finalizedEntriesEl) finalizedEntriesEl.textContent = finalizedEntriesCount;
     
     const reportPanel = document.getElementById('dashboard-report-panel');
     const reportEmpty = document.getElementById('dashboard-report-empty');
