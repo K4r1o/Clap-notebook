@@ -410,9 +410,14 @@
                     <div id="google-sync-status" class="api-key-status" style="margin-top: 8px; text-align: left; color: #8ed081;">
                         <i class="fa-solid fa-cloud-arrow-down"></i> 已與 Google 雲端硬碟同步中...
                     </div>
-                    <button id="force-sync-btn" class="btn btn-secondary" style="margin-top: 10px; display: flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 8px 14px;">
-                        <i class="fa-solid fa-rotate"></i> 立即強制同步到雲端
-                    </button>
+                    <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
+                        <button id="force-sync-btn" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 8px 14px;">
+                            <i class="fa-solid fa-cloud-arrow-up"></i> 強制上傳到雲端
+                        </button>
+                        <button id="force-pull-btn" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 8px 14px; background: rgba(100,180,255,0.15);">
+                            <i class="fa-solid fa-cloud-arrow-down"></i> 從雲端下載最新資料
+                        </button>
+                    </div>
                 </div>
                 
                 <button id="save-settings-btn" class="btn btn-secondary modal-save-btn" style="margin-top: 20px;">儲存設定</button>

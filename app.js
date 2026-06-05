@@ -85,6 +85,10 @@ let gisInited = false;
 let isSyncingToGoogle = false;
 let tokenExpiryTime = null; // Track when current token expires
 let pendingSyncAfterRefresh = false; // Retry sync after token refresh
+// Track if we already loaded cloud data in this session
+// This prevents overwriting newer local data on page reload
+const SESSION_KEY = 'will_ai_session_loaded';
+let hasLoadedCloudThisSession = sessionStorage.getItem(SESSION_KEY) === 'true';
 
 // DOM Elements
 const apiKeyInput = document.getElementById('api-key-input');
@@ -2553,23 +2557,27 @@ function isTokenExpiredOrExpiring() {
 function checkGoogleAuth() {
     if (gapiInited && gisInited && syncProvider === 'google' && googleAccessToken) {
         gapi.client.setToken({ access_token: googleAccessToken });
-        updateGoogleSyncStatus('已登入，自動同步中...', true);
         
         // Hide full-screen overlay if we have a valid token
         const overlay = document.getElementById('login-overlay');
         if (overlay) overlay.style.display = 'none';
         
-        loadFromGoogleDrive().catch(err => {
-            if (err && err.status === 401) {
-                // Token expired
-                localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN);
-                googleAccessToken = null;
-                updateGoogleSyncStatus('登入過期，請重新登入', false);
-                
-                // Show overlay again
-                if (overlay) overlay.style.display = 'flex';
-            }
-        });
+        if (hasLoadedCloudThisSession) {
+            // Same session/device: just upload any local changes, don't overwrite with cloud
+            updateGoogleSyncStatus('已登入，正在同步本機資料到雲端...', true);
+            syncToGoogleDrive();
+        } else {
+            // New session (e.g. different device or first load): download from cloud
+            updateGoogleSyncStatus('自動從雲端載入最新資料...', true);
+            loadFromGoogleDrive().catch(err => {
+                if (err && err.status === 401) {
+                    localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN);
+                    googleAccessToken = null;
+                    updateGoogleSyncStatus('登入過期，請重新登入', false);
+                    if (overlay) overlay.style.display = 'flex';
+                }
+            });
+        }
     } else {
         // If not authenticated, make sure the overlay is visible
         const overlay = document.getElementById('login-overlay');
@@ -2700,10 +2708,29 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             forceSyncBtn.disabled = true;
-            forceSyncBtn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> 同步中...';
+            forceSyncBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up fa-bounce"></i> 上傳中...';
             await syncToGoogleDrive();
             forceSyncBtn.disabled = false;
-            forceSyncBtn.innerHTML = '<i class="fa-solid fa-rotate"></i> 立即強制同步到雲端';
+            forceSyncBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> 強制上傳到雲端';
+        });
+    }
+    
+    const forcePullBtn = document.getElementById('force-pull-btn');
+    if (forcePullBtn) {
+        forcePullBtn.addEventListener('click', async () => {
+            if (syncProvider !== 'google' || !googleAccessToken) {
+                alert('尚未登入 Google，無法下載雲端資料。請先登入。');
+                return;
+            }
+            if (!confirm('確定要從雲端下載最新資料嗎？這將會以雲端版本覆蓋您目前的本機資料。')) return;
+            forcePullBtn.disabled = true;
+            forcePullBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down fa-bounce"></i> 下載中...';
+            // Clear session flag to force a fresh download
+            hasLoadedCloudThisSession = false;
+            sessionStorage.removeItem(SESSION_KEY);
+            await loadFromGoogleDrive();
+            forcePullBtn.disabled = false;
+            forcePullBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> 從雲端下載最新資料';
         });
     }
 });
@@ -2764,6 +2791,10 @@ async function loadFromGoogleDrive() {
                 updateWorkspaceView();
                 updateTrashBadge();
                 renderTrashList();
+                
+                // Mark that we've loaded cloud data in this session
+                hasLoadedCloudThisSession = true;
+                sessionStorage.setItem(SESSION_KEY, 'true');
                 
                 if (syncStatusBadge) {
                     syncStatusBadge.className = 'sync-badge cloud';
