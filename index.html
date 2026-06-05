@@ -63,12 +63,12 @@
             </div>
             
             <div class="subject-tools" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
+                <button id="add-subject-btn" class="btn-subject-add" title="新增主題分類">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
                 <button id="open-trash-btn" class="btn-subject-tool" title="資源回收桶" style="position: relative;">
                     <i class="fa-solid fa-trash-can"></i>
                     <span id="trash-badge" class="warning-dot" style="background-color: var(--accent-color); box-shadow: 0 0 8px var(--accent-color); display: none; position: absolute; top: 4px; right: 4px;"></span>
-                </button>
-                <button id="add-subject-btn" class="btn-subject-add" title="新增主題分類">
-                    <i class="fa-solid fa-plus"></i>
                 </button>
                 <button id="open-settings-btn" class="btn-subject-tool" title="系統與 AI 設定" style="position: relative;">
                     <i class="fa-solid fa-gear"></i>
@@ -597,7 +597,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=18"></script>
+    <script src="app.js?v=19"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
