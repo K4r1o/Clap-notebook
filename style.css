@@ -1845,7 +1845,6 @@ body[data-theme="classic"] option {
     background-color: var(--sidebar-hover) !important;
 }
 
-.folder-header.drag-hover {
 .btn-trash-action.restore:hover {
     color: #4a8043;
     border-color: #4a8043;
