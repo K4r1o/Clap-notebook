@@ -14,6 +14,7 @@ const STORAGE_KEYS = {
     SUPABASE_KEY: 'will_ai_supabase_key',
     SYNC_PROVIDER: 'will_ai_sync_provider',
     GOOGLE_TOKEN: 'will_ai_google_token',
+    GOOGLE_TOKEN_EXPIRY: 'will_ai_google_token_expiry',
     SUBJECTS: 'will_ai_subjects'
 };
 
@@ -83,7 +84,7 @@ let gapiLoadStarted = false;
 let gapiInited = false;
 let gisInited = false;
 let isSyncingToGoogle = false;
-let tokenExpiryTime = null; // Track when current token expires
+let tokenExpiryTime = localStorage.getItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY) ? parseInt(localStorage.getItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY)) : null; // Track when current token expires
 let pendingSyncAfterRefresh = false; // Retry sync after token refresh
 // Track if we already loaded cloud data in this session
 // This prevents overwriting newer local data on page reload
@@ -2513,6 +2514,7 @@ function gisLoaded() {
             localStorage.setItem(STORAGE_KEYS.GOOGLE_TOKEN, googleAccessToken);
             // Token expires in 3600 seconds, refresh 5 min early
             tokenExpiryTime = Date.now() + ((tokenResponse.expires_in || 3600) - 300) * 1000;
+            localStorage.setItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY, tokenExpiryTime);
             updateGoogleSyncStatus('登入成功，正在從雲端載入資料...', true);
             
             // Hide full-screen overlay when logged in successfully
@@ -2562,6 +2564,15 @@ function checkGoogleAuth() {
         const overlay = document.getElementById('login-overlay');
         if (overlay) overlay.style.display = 'none';
         
+        if (isTokenExpiredOrExpiring()) {
+            console.log('[Auth] Token expired or expiring soon, attempting silent refresh...');
+            const refreshed = silentTokenRefresh();
+            if (refreshed) {
+                updateGoogleSyncStatus('正在更新雲端連線...', true);
+                return; // Will reload via callback on success
+            }
+        }
+        
         if (hasLoadedCloudThisSession) {
             // Same session/device: just upload any local changes, don't overwrite with cloud
             updateGoogleSyncStatus('已登入，正在同步本機資料到雲端...', true);
@@ -2569,12 +2580,24 @@ function checkGoogleAuth() {
         } else {
             // New session (e.g. different device or first load): download from cloud
             updateGoogleSyncStatus('自動從雲端載入最新資料...', true);
-            loadFromGoogleDrive().catch(err => {
-                if (err && err.status === 401) {
+            loadFromGoogleDrive().catch(async err => {
+                const status = err && (err.status || (err.result && err.result.error && err.result.error.code));
+                if (status === 401) {
+                    console.log('[Load] Token expired (401), attempting silent refresh...');
+                    const refreshed = silentTokenRefresh();
+                    if (refreshed) {
+                        updateGoogleSyncStatus('正在重新整理連線...', true);
+                        return; // Will reload via callback on success
+                    }
+                    
                     localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN);
+                    localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY);
                     googleAccessToken = null;
+                    tokenExpiryTime = null;
                     updateGoogleSyncStatus('登入過期，請重新登入', false);
                     if (overlay) overlay.style.display = 'flex';
+                } else {
+                    updateGoogleSyncStatus('載入雲端資料失敗，請檢查網路連線或重新整理頁面。', false);
                 }
             });
         }
@@ -2678,6 +2701,7 @@ async function syncToGoogleDrive() {
             googleAccessToken = null;
             tokenExpiryTime = null;
             localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN);
+            localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY);
             const refreshed = silentTokenRefresh();
             if (!refreshed) {
                 updateGoogleSyncStatus('登入逾期，請重新登入。', false);
