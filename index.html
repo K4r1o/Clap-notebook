@@ -58,12 +58,23 @@
                 <i class="fa-solid fa-book-open"></i>
             </div>
             <div class="subject-divider"></div>
-            <div class="subject-list" id="subject-list">
+            <div class="subject-list" id="subject-list" style="flex-grow: 1; overflow-y: auto; overflow-x: hidden;">
                 <!-- Dynamic subject circles here -->
             </div>
-            <button id="add-subject-btn" class="btn-subject-add" title="新增主題分類">
-                <i class="fa-solid fa-plus"></i>
-            </button>
+            
+            <div class="subject-tools" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px;">
+                <button id="open-trash-btn" class="btn-subject-tool" title="資源回收桶" style="position: relative;">
+                    <i class="fa-solid fa-trash-can"></i>
+                    <span id="trash-badge" class="warning-dot" style="background-color: var(--accent-color); box-shadow: 0 0 8px var(--accent-color); display: none; position: absolute; top: 4px; right: 4px;"></span>
+                </button>
+                <button id="add-subject-btn" class="btn-subject-add" title="新增主題分類">
+                    <i class="fa-solid fa-plus"></i>
+                </button>
+                <button id="open-settings-btn" class="btn-subject-tool" title="系統與 AI 設定" style="position: relative;">
+                    <i class="fa-solid fa-gear"></i>
+                    <span id="api-warning-dot" class="warning-dot" style="position: absolute; top: 4px; right: 4px;"></span>
+                </button>
+            </div>
         </nav>
 
         <!-- Sidebar (Layer 2) -->
@@ -146,16 +157,8 @@
 
             </div>
             
-            <div class="sidebar-footer">
-                <button id="open-trash-btn" class="btn-settings-toggle" style="margin-bottom: 8px; background-color: rgba(255, 255, 255, 0.03);">
-                    <i class="fa-solid fa-trash-can"></i> 資源回收桶
-                    <span id="trash-badge" class="warning-dot" style="background-color: var(--accent-color); box-shadow: 0 0 8px var(--accent-color); display: none;"></span>
-                </button>
-                <button id="open-settings-btn" class="btn-settings-toggle">
-                    <i class="fa-solid fa-gear"></i> 系統與 AI 設定
-                    <span id="api-warning-dot" class="warning-dot"></span>
-                </button>
-                <p>2026 © Will.ai</p>
+            <div class="sidebar-footer" style="padding-top: 16px; border-top: 1px solid var(--sidebar-border); justify-content: center;">
+                <p style="text-align: center; width: 100%;">2026 © Will.ai</p>
             </div>
         </aside>
 
@@ -594,7 +597,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=17"></script>
+    <script src="app.js?v=18"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
