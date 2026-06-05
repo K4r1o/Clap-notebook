@@ -83,6 +83,8 @@ let gapiLoadStarted = false;
 let gapiInited = false;
 let gisInited = false;
 let isSyncingToGoogle = false;
+let tokenExpiryTime = null; // Track when current token expires
+let pendingSyncAfterRefresh = false; // Retry sync after token refresh
 
 // DOM Elements
 const apiKeyInput = document.getElementById('api-key-input');
@@ -2492,23 +2494,60 @@ function gisLoaded() {
         callback: (tokenResponse) => {
             if (tokenResponse.error !== undefined) {
                 console.error("Token Error:", tokenResponse);
-                updateGoogleSyncStatus('登入失敗，請稍後重試。', false);
+                // If silent refresh failed, show login overlay
+                if (tokenResponse.error === 'interaction_required' || tokenResponse.error === 'access_denied') {
+                    updateGoogleSyncStatus('登入逾期，請重新登入。', false);
+                    const overlay = document.getElementById('login-overlay');
+                    if (overlay) overlay.style.display = 'flex';
+                } else {
+                    updateGoogleSyncStatus('登入失敗，請稍後重試。', false);
+                }
+                pendingSyncAfterRefresh = false;
                 return;
             }
             googleAccessToken = tokenResponse.access_token;
             localStorage.setItem(STORAGE_KEYS.GOOGLE_TOKEN, googleAccessToken);
+            // Token expires in 3600 seconds, refresh 5 min early
+            tokenExpiryTime = Date.now() + ((tokenResponse.expires_in || 3600) - 300) * 1000;
             updateGoogleSyncStatus('登入成功，正在從雲端載入資料...', true);
             
             // Hide full-screen overlay when logged in successfully
             const overlay = document.getElementById('login-overlay');
             if (overlay) overlay.style.display = 'none';
             
-            // CRITICAL FIX: Must load from drive on fresh login, not sync to it!
-            loadFromGoogleDrive();
+            if (pendingSyncAfterRefresh) {
+                // If this was a silent refresh triggered by a failed sync, retry
+                pendingSyncAfterRefresh = false;
+                gapi.client.setToken({ access_token: googleAccessToken });
+                syncToGoogleDrive();
+            } else {
+                // CRITICAL FIX: Must load from drive on fresh login, not sync to it!
+                loadFromGoogleDrive();
+            }
         },
     });
     gisInited = true;
     checkGoogleAuth();
+}
+
+// Silently refresh the token without showing a popup (if possible)
+function silentTokenRefresh() {
+    if (!googleTokenClient) return false;
+    try {
+        pendingSyncAfterRefresh = true;
+        googleTokenClient.requestAccessToken({ prompt: '' }); // empty prompt = silent
+        return true;
+    } catch (e) {
+        pendingSyncAfterRefresh = false;
+        return false;
+    }
+}
+
+// Check if token is expired or about to expire
+function isTokenExpiredOrExpiring() {
+    if (!googleAccessToken) return true;
+    if (!tokenExpiryTime) return false; // No expiry tracked yet, assume still valid
+    return Date.now() >= tokenExpiryTime;
 }
 
 function checkGoogleAuth() {
@@ -2554,6 +2593,14 @@ function updateGoogleSyncStatus(message, isSuccess = true) {
 async function syncToGoogleDrive() {
     if (syncProvider !== 'google' || !googleAccessToken || !gapiInited) return;
     if (isSyncingToGoogle) return;
+    
+    // Check if token is expired before attempting sync
+    if (isTokenExpiredOrExpiring()) {
+        console.log('[Sync] Token expired or expiring soon, attempting silent refresh...');
+        const refreshed = silentTokenRefresh();
+        if (refreshed) return; // Will retry after refresh via callback
+        // If refresh failed, proceed anyway and catch the error
+    }
     
     isSyncingToGoogle = true;
     try {
@@ -2616,10 +2663,27 @@ async function syncToGoogleDrive() {
         
     } catch (err) {
         console.error("Google Drive Sync Error:", err);
-        updateGoogleSyncStatus('同步失敗，請檢查網路連線或重新登入。', false);
-        if (syncStatusBadge) {
-            syncStatusBadge.className = 'sync-badge error';
-            syncStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 同步失敗';
+        // If 401 (token expired), try silent refresh and retry once
+        const status = err && (err.status || (err.result && err.result.error && err.result.error.code));
+        if (status === 401) {
+            console.log('[Sync] 401 detected, attempting silent token refresh...');
+            googleAccessToken = null;
+            tokenExpiryTime = null;
+            localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN);
+            const refreshed = silentTokenRefresh();
+            if (!refreshed) {
+                updateGoogleSyncStatus('登入逾期，請重新登入。', false);
+                const overlay = document.getElementById('login-overlay');
+                if (overlay) overlay.style.display = 'flex';
+            } else {
+                updateGoogleSyncStatus('Token 已更新，正在重新同步...', true);
+            }
+        } else {
+            updateGoogleSyncStatus('同步失敗，請檢查網路連線或重新登入。', false);
+            if (syncStatusBadge) {
+                syncStatusBadge.className = 'sync-badge error';
+                syncStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 同步失敗';
+            }
         }
     } finally {
         isSyncingToGoogle = false;
