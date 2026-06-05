@@ -13,7 +13,7 @@
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=4">
+    <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
     <!-- Mandatory Login Overlay -->
@@ -38,13 +38,39 @@
     </div>
 
     <div class="app-container">
-        <!-- Sidebar -->
+        <!-- Subject Bar (Layer 1) -->
+        <nav class="subject-bar">
+            <div class="subject-logo" id="subject-logo" title="Will.ai">
+                <i class="fa-solid fa-book-open"></i>
+            </div>
+            <div class="subject-divider"></div>
+            <div class="subject-list" id="subject-list">
+                <!-- Dynamic subject circles here -->
+            </div>
+            <button id="add-subject-btn" class="btn-subject-add" title="新增主題分類">
+                <i class="fa-solid fa-plus"></i>
+            </button>
+        </nav>
+
+        <!-- Sidebar (Layer 2) -->
         <aside class="sidebar">
-            <div class="sidebar-header">
-                <i class="fa-solid fa-book-open logo-icon"></i>
-                <h1>Will.ai</h1>
-                <p class="subtitle">Capture the whisper. Command the rest.</p>
-                <div id="sync-status-badge" class="sync-badge local">
+            <div class="sidebar-header" style="align-items: stretch; text-align: left; padding-bottom: 12px; margin-bottom: 16px;">
+                <div class="subject-header-dropdown" id="subject-header-dropdown">
+                    <div class="subject-header-title">
+                        <span id="current-subject-icon" style="font-size: 1.2rem; margin-right: 6px;">📝</span>
+                        <h2 id="current-subject-name" style="font-size: 1.1rem; margin: 0; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px;">預設主題</h2>
+                    </div>
+                    <i class="fa-solid fa-chevron-down dropdown-arrow" style="font-size: 0.8rem; opacity: 0.7; transition: var(--transition);"></i>
+                    
+                    <!-- Subject Action Dropdown -->
+                    <div id="subject-actions-menu" class="dropdown-menu" style="display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--sidebar-bg); border: 1px solid var(--sidebar-border); border-radius: 8px; box-shadow: var(--box-shadow-lg); z-index: 1000; margin-top: 4px; padding: 6px 0;">
+                        <button id="rename-subject-btn" style="width: 100%; background: none; border: none; padding: 10px 16px; text-align: left; color: var(--sidebar-text); font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: var(--transition);"><i class="fa-solid fa-pen" style="width: 14px;"></i> 重新命名主題</button>
+                        <button id="subject-summary-btn" style="width: 100%; background: none; border: none; padding: 10px 16px; text-align: left; color: var(--sidebar-text); font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: var(--transition);"><i class="fa-solid fa-wand-magic-sparkles" style="width: 14px;"></i> AI 主題整合摘要</button>
+                        <hr class="dropdown-divider" style="margin: 4px 0; border: none; border-top: 1px solid var(--sidebar-hover);">
+                        <button id="delete-subject-btn" class="danger" style="width: 100%; background: none; border: none; padding: 10px 16px; text-align: left; color: #ff6b6b; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: var(--transition);"><i class="fa-solid fa-trash-can" style="width: 14px;"></i> 刪除主題</button>
+                    </div>
+                </div>
+                <div id="sync-status-badge" class="sync-badge local" style="margin-top: 8px; align-self: flex-start; margin-left: 4px;">
                     <i class="fa-solid fa-folder"></i> 本地儲存
                 </div>
             </div>
@@ -127,6 +153,65 @@
                     <i class="fa-solid fa-pen-nib empty-icon"></i>
                     <h2>開啟一本新筆記</h2>
                     <p>請在左側選擇已有的筆記本，或點擊 <i class="fa-solid fa-plus"></i> 新增筆記本開始紀錄您的思緒。</p>
+                </div>
+            </div>
+
+            <!-- Subject/Folder Dashboard View -->
+            <div id="dashboard-state" class="dashboard-state" style="display: none; flex-direction: column; height: 100%; width: 100%; padding: 32px; box-sizing: border-box; overflow-y: auto;">
+                <header class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--header-border); padding-bottom: 16px; margin-bottom: 24px;">
+                    <div class="dashboard-info">
+                        <h2 id="dashboard-title" style="font-family: var(--font-serif); font-size: 2rem; margin: 0; color: var(--accent-color);">主題名稱</h2>
+                        <p id="dashboard-meta" style="font-size: 0.9rem; color: var(--ink-muted); margin: 4px 0 0 0;">包含 X 個資料夾，Y 本筆記本，Z 條隨筆</p>
+                    </div>
+                    <div class="dashboard-actions">
+                        <button id="dashboard-ai-btn" class="btn btn-primary" style="display: flex; align-items: center; gap: 8px;">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> 生成 AI 整合摘要
+                        </button>
+                    </div>
+                </header>
+                <div class="dashboard-body" style="display: flex; flex-direction: column; gap: 24px; flex-grow: 1;">
+                    <!-- Stat cards -->
+                    <div class="dashboard-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px;">
+                        <div class="stat-card" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--report-border); border-radius: var(--border-radius); padding: 16px; display: flex; align-items: center; gap: 12px;">
+                            <i class="fa-solid fa-folder-open" style="font-size: 2rem; color: var(--accent-color); opacity: 0.8;"></i>
+                            <div class="stat-info" style="display: flex; flex-direction: column;">
+                                <span class="stat-num" id="stat-folders-count" style="font-size: 1.5rem; font-weight: 700; color: var(--ink-color);">0</span>
+                                <span class="stat-label" style="font-size: 0.8rem; color: var(--ink-muted);">資料夾</span>
+                            </div>
+                        </div>
+                        <div class="stat-card" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--report-border); border-radius: var(--border-radius); padding: 16px; display: flex; align-items: center; gap: 12px;">
+                            <i class="fa-solid fa-book-bookmark" style="font-size: 2rem; color: var(--accent-color); opacity: 0.8;"></i>
+                            <div class="stat-info" style="display: flex; flex-direction: column;">
+                                <span class="stat-num" id="stat-notebooks-count" style="font-size: 1.5rem; font-weight: 700; color: var(--ink-color);">0</span>
+                                <span class="stat-label" style="font-size: 0.8rem; color: var(--ink-muted);">筆記本</span>
+                            </div>
+                        </div>
+                        <div class="stat-card" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--report-border); border-radius: var(--border-radius); padding: 16px; display: flex; align-items: center; gap: 12px;">
+                            <i class="fa-solid fa-pen-fancy" style="font-size: 2rem; color: var(--accent-color); opacity: 0.8;"></i>
+                            <div class="stat-info" style="display: flex; flex-direction: column;">
+                                <span class="stat-num" id="stat-entries-count" style="font-size: 1.5rem; font-weight: 700; color: var(--ink-color);">0</span>
+                                <span class="stat-label" style="font-size: 0.8rem; color: var(--ink-muted);">隨筆筆記</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- AI Report Panel -->
+                    <div id="dashboard-report-panel" class="report-panel" style="display: none; margin: 0; flex-grow: 1; height: auto;">
+                        <div class="report-header" style="background: var(--header-bg); border-bottom: 1px solid var(--report-border); display: flex; justify-content: space-between; align-items: center; padding: 12px 20px;">
+                            <h3 style="margin: 0; font-size: 1rem; color: var(--ink-color); display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-file-invoice" style="color: var(--accent-color);"></i> AI 智能整合摘要</h3>
+                            <div class="report-actions" style="display: flex; gap: 8px;">
+                                <button id="dashboard-copy-report-btn" class="btn-report-action" title="複製 Markdown"><i class="fa-solid fa-copy"></i> 複製</button>
+                                <button id="dashboard-download-report-btn" class="btn-report-action" title="下載為檔案"><i class="fa-solid fa-file-arrow-down"></i> 下載</button>
+                            </div>
+                        </div>
+                        <div id="dashboard-report-content" class="report-content markdown-body" style="padding: 24px; background: var(--report-bg); font-family: var(--font-sans); color: var(--ink-color); line-height: 1.6; max-height: 500px; overflow-y: auto;"></div>
+                    </div>
+                    
+                    <!-- Empty Report State -->
+                    <div id="dashboard-report-empty" class="dashboard-report-empty" style="flex-grow: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px dashed var(--report-border); border-radius: var(--border-radius); padding: 48px; text-align: center; color: var(--ink-muted);">
+                        <i class="fa-solid fa-wand-magic-sparkles" style="font-size: 3rem; margin-bottom: 16px; opacity: 0.5;"></i>
+                        <p style="margin: 0; font-size: 1rem;">尚未生成此層級的 AI 整合摘要。點擊右上角按鈕進行一鍵生成！</p>
+                    </div>
                 </div>
             </div>
 
@@ -445,6 +530,40 @@
         </div>
     </div>
 
+    <!-- Add / Edit Subject Modal -->
+    <div id="subject-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-content" style="width: 400px;">
+            <div class="modal-header">
+                <h3 id="subject-modal-title"><i class="fa-solid fa-folder-plus"></i> 新增主題分類</h3>
+                <button id="close-subject-modal-btn" class="btn-close-modal"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-item-modal">
+                    <label class="modal-label">主題名稱</label>
+                    <input type="text" id="subject-name-input" placeholder="例如：工作、生活、程式學習" class="modal-text-input">
+                </div>
+                <div class="setting-item-modal" style="margin-top: 16px;">
+                    <label class="modal-label">主題圖示 (單個 Emoji 或字元)</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="subject-icon-input" placeholder="💡" class="modal-text-input" style="width: 60px; text-align: center; font-size: 1.2rem;" maxlength="2">
+                        <div class="emoji-suggestions" style="display: flex; gap: 6px; align-items: center; overflow-x: auto; flex-grow: 1;">
+                            <span class="emoji-suggest-btn" style="cursor: pointer; font-size: 1.2rem; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.05);">📝</span>
+                            <span class="emoji-suggest-btn" style="cursor: pointer; font-size: 1.2rem; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.05);">💼</span>
+                            <span class="emoji-suggest-btn" style="cursor: pointer; font-size: 1.2rem; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.05);">🏠</span>
+                            <span class="emoji-suggest-btn" style="cursor: pointer; font-size: 1.2rem; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.05);">🎓</span>
+                            <span class="emoji-suggest-btn" style="cursor: pointer; font-size: 1.2rem; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.05);">🚀</span>
+                            <span class="emoji-suggest-btn" style="cursor: pointer; font-size: 1.2rem; padding: 4px; border-radius: 4px; background: rgba(0,0,0,0.05);">🎨</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer-actions" style="margin-top: 24px; display: flex; justify-content: flex-end; gap: 12px;">
+                    <button id="cancel-subject-modal-btn" class="btn btn-secondary" style="background-color: var(--input-bg); color: var(--ink-color);">取消</button>
+                    <button id="confirm-subject-modal-btn" class="btn btn-primary">確認</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Undo Toast -->
     <div id="undo-toast" class="undo-toast" style="display: none;">
         <div class="undo-toast-content">
@@ -456,7 +575,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=4"></script>
+    <script src="app.js?v=5"></script>
     <!-- Google Identity Services -->
     <script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
     <!-- Google APIs -->

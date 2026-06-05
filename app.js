@@ -13,7 +13,8 @@ const STORAGE_KEYS = {
     SUPABASE_URL: 'will_ai_supabase_url',
     SUPABASE_KEY: 'will_ai_supabase_key',
     SYNC_PROVIDER: 'will_ai_sync_provider',
-    GOOGLE_TOKEN: 'will_ai_google_token'
+    GOOGLE_TOKEN: 'will_ai_google_token',
+    SUBJECTS: 'will_ai_subjects'
 };
 
 // Migration from Warm Notebook legacy storage keys to Will.ai keys
@@ -65,6 +66,9 @@ let entries = [];
 let trashNotebooks = [];
 let trashEntries = [];
 let folders = [];
+let subjects = [];
+let currentSubjectId = null;
+let currentFolderId = null;
 let activeTrashTab = 'entries'; // 'entries' or 'notebooks'
 let currentNotebookId = null;
 let isBulkSelectMode = false;
@@ -160,6 +164,60 @@ function saveFoldersToStorage() {
     }
 }
 
+function saveSubjectsToStorage() {
+    localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
+    if (syncProvider === 'google') {
+        syncToGoogleDrive();
+    }
+}
+
+// Migrate legacy data structures to support subjects
+function migrateSubjects() {
+    const storedSubjects = localStorage.getItem(STORAGE_KEYS.SUBJECTS);
+    if (storedSubjects) {
+        subjects = JSON.parse(storedSubjects);
+    } else {
+        subjects = [];
+    }
+    
+    if (subjects.length === 0) {
+        const defaultSubject = {
+            id: 'default-subject',
+            name: '一般筆記',
+            icon: '📝',
+            created_at: formatDateTime(new Date())
+        };
+        subjects.push(defaultSubject);
+        localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
+    }
+    
+    let folderUpdated = false;
+    folders.forEach(f => {
+        if (!f.subjectId) {
+            f.subjectId = 'default-subject';
+            folderUpdated = true;
+        }
+    });
+    if (folderUpdated) {
+        localStorage.setItem(STORAGE_KEYS.FOLDERS, JSON.stringify(folders));
+    }
+    
+    let notebookUpdated = false;
+    notebooks.forEach(n => {
+        if (!n.subjectId) {
+            n.subjectId = 'default-subject';
+            notebookUpdated = true;
+        }
+    });
+    if (notebookUpdated) {
+        localStorage.setItem(STORAGE_KEYS.NOTEBOOKS, JSON.stringify(notebooks));
+    }
+    
+    if (!currentSubjectId || !subjects.find(s => s.id === currentSubjectId)) {
+        currentSubjectId = subjects[0].id;
+    }
+}
+
 // Supabase Client initialization
 function initSupabase() {
     if (syncProvider !== 'supabase') return;
@@ -231,6 +289,8 @@ async function loadFromStorage() {
     trashNotebooks = JSON.parse(localStorage.getItem(STORAGE_KEYS.TRASH_NOTEBOOKS)) || [];
     trashEntries = JSON.parse(localStorage.getItem(STORAGE_KEYS.TRASH_ENTRIES)) || [];
     folders = JSON.parse(localStorage.getItem(STORAGE_KEYS.FOLDERS)) || [];
+    migrateSubjects();
+    renderSubjectsList();
     
     loadSettingsFromStorage();
     
@@ -625,8 +685,10 @@ function resetModelSelectToDefault() {
 function renderNotebooksList() {
     notebooksList.innerHTML = '';
     
-    // 1. Render Folders
-    folders.forEach(folder => {
+    // 1. Render Folders under current subject
+    const subjectFolders = folders.filter(f => f.subjectId === currentSubjectId);
+    
+    subjectFolders.forEach(folder => {
         const folderEl = document.createElement('div');
         folderEl.className = `folder-item ${folder.isCollapsed ? 'collapsed' : ''}`;
         folderEl.dataset.id = folder.id;
@@ -635,14 +697,19 @@ function renderNotebooksList() {
         const folderNotebooks = notebooks.filter(nb => nb.folderId === folder.id);
         const sortedFolderNotebooks = [...folderNotebooks].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         
+        const isFolderActive = currentFolderId === folder.id;
+        
         folderEl.innerHTML = `
-            <div class="folder-header" data-id="${folder.id}">
+            <div class="folder-header ${isFolderActive ? 'active' : ''}" data-id="${folder.id}" style="${isFolderActive ? 'background-color: var(--sidebar-hover); border-left: 3px solid var(--sidebar-accent);' : ''}">
                 <div class="folder-info">
                     <i class="fa-solid fa-chevron-down folder-toggle-arrow"></i>
                     <i class="fa-solid ${folder.isCollapsed ? 'fa-folder' : 'fa-folder-open'} folder-icon"></i>
                     <span class="folder-name-text" title="雙擊或點擊重新命名按鈕可修改名稱">${escapeHtml(folder.name)}</span>
                 </div>
                 <div class="folder-actions">
+                    <button class="btn-folder-action btn-folder-summary" title="AI 資料夾整合摘要">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    </button>
                     <button class="btn-folder-action rename-folder-btn" title="重新命名資料夾">
                         <i class="fa-solid fa-pen"></i>
                     </button>
@@ -689,8 +756,9 @@ function renderNotebooksList() {
                     ids.forEach(id => {
                         const notebook = notebooks.find(nb => nb.id === id);
                         if (notebook) {
-                            moves.push({ notebookId: id, previousFolderId: notebook.folderId });
+                            moves.push({ notebookId: id, previousFolderId: notebook.folderId, previousSubjectId: notebook.subjectId });
                             notebook.folderId = folder.id;
+                            notebook.subjectId = folder.subjectId;
                         }
                     });
                     if (moves.length > 0) {
@@ -706,9 +774,10 @@ function renderNotebooksList() {
                 if (notebook) {
                     undoCache = {
                         action: 'move',
-                        moves: [{ notebookId: notebook.id, previousFolderId: notebook.folderId }]
+                        moves: [{ notebookId: notebook.id, previousFolderId: notebook.folderId, previousSubjectId: notebook.subjectId }]
                     };
                     notebook.folderId = folder.id;
+                    notebook.subjectId = folder.subjectId;
                     showUndoToast('move', `已將筆記本「${notebook.title}」移至資料夾「${folder.name}」。`);
                     saveNotebooksToStorage();
                     renderNotebooksList();
@@ -725,17 +794,17 @@ function renderNotebooksList() {
             folderNameSpan.focus();
             document.execCommand('selectAll', false, null);
         }
-
+ 
         folderNameSpan.addEventListener('dblclick', (e) => {
             e.stopPropagation();
             enableRename();
         });
-
+ 
         folderEl.querySelector('.rename-folder-btn').addEventListener('click', (e) => {
             e.stopPropagation();
             enableRename();
         });
-
+ 
         folderNameSpan.addEventListener('blur', () => {
             folderNameSpan.contentEditable = "false";
             renameFolder(folder.id, folderNameSpan.textContent.trim());
@@ -745,6 +814,12 @@ function renderNotebooksList() {
                 e.preventDefault();
                 folderNameSpan.blur();
             }
+        });
+        
+        // Folder Summary button
+        folderEl.querySelector('.btn-folder-summary').addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectFolderForDashboard(folder.id);
         });
         
         // Add notebook directly inside folder
@@ -770,11 +845,11 @@ function renderNotebooksList() {
         notebooksList.appendChild(folderEl);
     });
     
-    // 2. Render Uncategorized Notebooks (Unclassified)
-    const uncategorizedNotebooks = notebooks.filter(nb => !nb.folderId || !folders.some(f => f.id === nb.folderId));
-    if (uncategorizedNotebooks.length > 0 || folders.length === 0) {
+    // 2. Render Uncategorized Notebooks (Unclassified) under current subject
+    const uncategorizedNotebooks = notebooks.filter(nb => nb.subjectId === currentSubjectId && (!nb.folderId || !folders.some(f => f.id === nb.folderId)));
+    if (uncategorizedNotebooks.length > 0 || subjectFolders.length === 0) {
         // If there are folders, show an "Uncategorized" title, else just render notebooks
-        if (folders.length > 0) {
+        if (subjectFolders.length > 0) {
             const titleEl = document.createElement('div');
             titleEl.className = 'section-title';
             titleEl.style.marginTop = '16px';
@@ -944,7 +1019,8 @@ function createFolder() {
     const newFolder = {
         id: generateId(),
         name: `新資料夾 #${count}`,
-        isCollapsed: false
+        isCollapsed: false,
+        subjectId: currentSubjectId
     };
     folders.push(newFolder);
     saveFoldersToStorage();
@@ -1014,13 +1090,14 @@ function handleCheckboxClick(e, id) {
 // Get rendered notebooks order in list
 function getVisibleNotebookIds() {
     const ids = [];
-    folders.forEach(folder => {
+    const subjectFolders = folders.filter(f => f.subjectId === currentSubjectId);
+    subjectFolders.forEach(folder => {
         const folderNotebooks = notebooks.filter(nb => nb.folderId === folder.id);
         const sortedFolderNotebooks = [...folderNotebooks].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         sortedFolderNotebooks.forEach(nb => ids.push(nb.id));
     });
     
-    const uncategorized = notebooks.filter(nb => !nb.folderId || !folders.some(f => f.id === nb.folderId));
+    const uncategorized = notebooks.filter(nb => nb.subjectId === currentSubjectId && (!nb.folderId || !folders.some(f => f.id === nb.folderId)));
     const sortedUncategorized = [...uncategorized].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     sortedUncategorized.forEach(nb => ids.push(nb.id));
     
@@ -1092,7 +1169,8 @@ function updateBulkMoveSelectOptions() {
     if (!select) return;
     
     select.innerHTML = '<option value="">-- 移至未分類 --</option>';
-    folders.forEach(folder => {
+    const subjectFolders = folders.filter(f => f.subjectId === currentSubjectId);
+    subjectFolders.forEach(folder => {
         select.innerHTML += `<option value="${folder.id}">${escapeHtml(folder.name)}</option>`;
     });
 }
@@ -1691,12 +1769,23 @@ function selectNotebook(id) {
 
 // Update workspace view depending on active notebook state
 function updateWorkspaceView() {
+    const dashboardState = document.getElementById('dashboard-state');
     if (!currentNotebookId) {
         workspace.style.display = 'none';
-        emptyState.style.display = 'flex';
+        if (currentFolderId) {
+            emptyState.style.display = 'none';
+            showDashboard('folder', currentFolderId);
+        } else if (currentSubjectId) {
+            emptyState.style.display = 'none';
+            showDashboard('subject', currentSubjectId);
+        } else {
+            emptyState.style.display = 'flex';
+            if (dashboardState) dashboardState.style.display = 'none';
+        }
         return;
     }
     
+    if (dashboardState) dashboardState.style.display = 'none';
     emptyState.style.display = 'none';
     workspace.style.display = 'flex';
     
@@ -1892,6 +1981,13 @@ function startEditing(entryId, card, body, actionsDiv) {
 function createNotebook(folderId = null) {
     const id = generateId();
     const count = notebooks.length + 1;
+    
+    let subjectId = currentSubjectId;
+    if (folderId) {
+        const folder = folders.find(f => f.id === folderId);
+        if (folder) subjectId = folder.subjectId;
+    }
+    
     const newNotebook = {
         id: id,
         title: `隨筆筆記本 #${count}`,
@@ -1899,6 +1995,7 @@ function createNotebook(folderId = null) {
         status: 'active',
         report: null,
         folderId: folderId,
+        subjectId: subjectId,
         isProtected: false
     };
     
@@ -2329,6 +2426,7 @@ async function syncToGoogleDrive() {
         const fileId = files && files.length > 0 ? files[0].id : null;
         
         const syncData = {
+            subjects,
             notebooks,
             entries,
             folders,
@@ -2403,12 +2501,16 @@ async function loadFromGoogleDrive() {
             
             const data = fileRes.result;
             if (data) {
+                if (data.subjects) subjects = data.subjects;
                 if (data.notebooks) notebooks = data.notebooks;
                 if (data.entries) entries = data.entries;
                 if (data.folders) folders = data.folders;
                 if (data.trashNotebooks) trashNotebooks = data.trashNotebooks;
                 if (data.trashEntries) trashEntries = data.trashEntries;
                 
+                migrateSubjects();
+                
+                localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
                 localStorage.setItem(STORAGE_KEYS.FOLDERS, JSON.stringify(folders));
                 localStorage.setItem(STORAGE_KEYS.NOTEBOOKS, JSON.stringify(notebooks));
                 localStorage.setItem(STORAGE_KEYS.ENTRIES, JSON.stringify(entries));
@@ -2430,6 +2532,7 @@ async function loadFromGoogleDrive() {
                 }
                 
                 if (typeof updateModelDetails === 'function') updateModelDetails();
+                renderSubjectsList();
                 renderNotebooksList();
                 updateWorkspaceView();
                 updateTrashBadge();
@@ -2787,12 +2890,512 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Dismiss context menu on click outside
-document.addEventListener('click', (e) => {
-    const ctxMenu = document.getElementById('custom-context-menu');
-    if (ctxMenu && !e.target.closest('#custom-context-menu')) {
-        ctxMenu.style.display = 'none';
+});
+
+// --- Subject & Dashboard Functions ---
+
+function downloadTextFile(content, filename) {
+    const cleanFilename = filename.replace(/[\/\\:\*\?"<>\|]/g, '_');
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = cleanFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// Render Subject Circles in leftmost panel
+function renderSubjectsList() {
+    const subjectListContainer = document.getElementById('subject-list');
+    if (!subjectListContainer) return;
+    subjectListContainer.innerHTML = '';
+    
+    subjects.forEach(subject => {
+        const wrapper = document.createElement('div');
+        wrapper.className = `subject-item-wrapper ${subject.id === currentSubjectId ? 'active' : ''}`;
+        wrapper.dataset.id = subject.id;
+        
+        const displaySymbol = subject.icon ? subject.icon : (subject.name ? subject.name.substring(0, 2) : '無');
+        
+        wrapper.innerHTML = `
+            <div class="subject-indicator-pill"></div>
+            <div class="subject-item-circle" title="${escapeHtml(subject.name)}">${escapeHtml(displaySymbol)}</div>
+        `;
+        
+        wrapper.addEventListener('click', () => {
+            selectSubject(subject.id);
+        });
+        
+        subjectListContainer.appendChild(wrapper);
+    });
+    
+    const activeSub = subjects.find(s => s.id === currentSubjectId);
+    if (activeSub) {
+        const nameEl = document.getElementById('current-subject-name');
+        const iconEl = document.getElementById('current-subject-icon');
+        if (nameEl) nameEl.textContent = activeSub.name;
+        if (iconEl) iconEl.textContent = activeSub.icon || '📝';
+    }
+}
+
+// Select Active Subject
+function selectSubject(id) {
+    currentSubjectId = id;
+    currentFolderId = null;
+    currentNotebookId = null;
+    
+    renderSubjectsList();
+    renderNotebooksList();
+    updateWorkspaceView();
+    showDashboard('subject', id);
+}
+
+// Create new Subject
+function createSubject(name, icon) {
+    if (!name.trim()) return;
+    
+    const newSubject = {
+        id: generateId(),
+        name: name.trim(),
+        icon: icon.trim() || '💡',
+        report: null,
+        report_created_at: null,
+        created_at: formatDateTime(new Date())
+    };
+    
+    subjects.push(newSubject);
+    saveSubjectsToStorage();
+    selectSubject(newSubject.id);
+}
+
+// Select Folder for dashboard view (AI summary of folder)
+function selectFolderForDashboard(folderId) {
+    currentFolderId = folderId;
+    currentNotebookId = null;
+    
+    renderNotebooksList();
+    updateWorkspaceView();
+    showDashboard('folder', folderId);
+}
+
+// Show Dashboard inside main panel
+function showDashboard(type, id) {
+    const dashboardState = document.getElementById('dashboard-state');
+    const emptyState = document.getElementById('empty-state');
+    const workspace = document.getElementById('workspace');
+    
+    if (!dashboardState) return;
+    
+    if (emptyState) emptyState.style.display = 'none';
+    if (workspace) workspace.style.display = 'none';
+    dashboardState.style.display = 'flex';
+    
+    let title = '';
+    let report = null;
+    let foldersCount = 0;
+    let notebooksCount = 0;
+    let entriesCount = 0;
+    
+    if (type === 'subject') {
+        const subject = subjects.find(s => s.id === id);
+        if (!subject) return;
+        
+        title = `${subject.icon || '📝'} ${subject.name}`;
+        report = subject.report;
+        
+        const subFolders = folders.filter(f => f.subjectId === id);
+        foldersCount = subFolders.length;
+        
+        const subNotebooks = notebooks.filter(n => n.subjectId === id);
+        notebooksCount = subNotebooks.length;
+        
+        const notebookIds = new Set(subNotebooks.map(n => n.id));
+        const subEntries = entries.filter(e => notebookIds.has(e.notebook_id));
+        entriesCount = subEntries.length;
+        
+        document.getElementById('dashboard-meta').textContent = `包含 ${foldersCount} 個資料夾，${notebooksCount} 本筆記本，${entriesCount} 條隨筆`;
+        
+        const aiBtn = document.getElementById('dashboard-ai-btn');
+        aiBtn.onclick = () => generateSubjectReport(id);
+        
+    } else if (type === 'folder') {
+        const folder = folders.find(f => f.id === id);
+        if (!folder) return;
+        
+        title = `📂 ${folder.name}`;
+        report = folder.report;
+        
+        foldersCount = 1;
+        
+        const folderNotebooks = notebooks.filter(n => n.folderId === id);
+        notebooksCount = folderNotebooks.length;
+        
+        const notebookIds = new Set(folderNotebooks.map(n => n.id));
+        const folderEntries = entries.filter(e => notebookIds.has(e.notebook_id));
+        entriesCount = folderEntries.length;
+        
+        document.getElementById('dashboard-meta').textContent = `包含 ${notebooksCount} 本筆記本，${entriesCount} 條隨筆`;
+        
+        const aiBtn = document.getElementById('dashboard-ai-btn');
+        aiBtn.onclick = () => generateFolderReport(id);
+    }
+    
+    document.getElementById('dashboard-title').textContent = title;
+    
+    const reportPanel = document.getElementById('dashboard-report-panel');
+    const reportEmpty = document.getElementById('dashboard-report-empty');
+    const reportContent = document.getElementById('dashboard-report-content');
+    
+    if (report) {
+        reportPanel.style.display = 'block';
+        reportEmpty.style.display = 'none';
+        reportContent.innerHTML = marked.parse(report);
+        
+        document.getElementById('dashboard-copy-report-btn').onclick = () => {
+            navigator.clipboard.writeText(report).then(() => {
+                alert('報告已複製到剪貼簿！');
+            });
+        };
+        document.getElementById('dashboard-download-report-btn').onclick = () => {
+            downloadTextFile(report, `${title.replace(/[\s\/\\]/g, '_')}_AI報告.md`);
+        };
+    } else {
+        reportPanel.style.display = 'none';
+        reportEmpty.style.display = 'flex';
+    }
+}
+
+// Generate AI Report for Subject
+async function generateSubjectReport(subjectId) {
+    const apiKey = localStorage.getItem(STORAGE_KEYS.API_KEY);
+    if (!apiKey) {
+        alert('未偵測到 API 金鑰，請先在「系統與 AI 設定」中輸入並儲存您的 Gemini API 金鑰！');
+        const settingsModal = document.getElementById('settings-modal');
+        if (settingsModal) settingsModal.style.display = 'flex';
+        return;
+    }
+    
+    const subject = subjects.find(s => s.id === subjectId);
+    if (!subject) return;
+    
+    const subNotebooks = notebooks.filter(n => n.subjectId === subjectId);
+    if (subNotebooks.length === 0) {
+        alert('此主題下沒有任何筆記本！');
+        return;
+    }
+    
+    const notebookIds = new Set(subNotebooks.map(n => n.id));
+    const subEntries = entries.filter(e => notebookIds.has(e.notebook_id));
+    if (subEntries.length === 0) {
+        alert('此主題下沒有任何隨筆筆記！請先新增一些筆記內容再進行整理。');
+        return;
+    }
+    
+    loadingOverlay.style.display = 'flex';
+    
+    try {
+        let notesText = '';
+        subNotebooks.forEach(nb => {
+            const nbEntries = subEntries.filter(e => e.notebook_id === nb.id);
+            if (nbEntries.length > 0) {
+                notesText += `### 筆記本：${nb.title}\n`;
+                notesText += nbEntries.map(e => `[時間：${e.created_at}] ${e.content}`).join('\n');
+                notesText += '\n\n';
+            }
+        });
+        
+        const systemPrompt = `你是一位專業且貼心的隨身智能助理。以下是使用者在整個主題分類「${subject.name}」中多個筆記本內的零碎隨手筆記。
+請你幫忙進行跨筆記本的全局宏觀邏輯整合，理清條理，撰寫成一份高階主題整合工作匯報。
+
+請嚴格遵循以下匯報格式要求：
+1. 請以「Markdown」格式進行輸出。
+2. 匯報結構必須包含：
+   - # 🏷️主題整合工作報告：${subject.name}
+   - ## 📋 全局概覽
+     (簡短整合總結該主題下的核心任務重點、進度與當前狀況)
+   - ## 🔍 各項目/筆記本主要內容整合
+     (依照不同筆記本或內容主題，分成幾個大項目，條列出具體進度、重要筆記與成果)
+   - ## 🚀 行動建議與下一步代辦
+     (從所有筆記中提煉出下一步明確的 Action Items 待辦清單，給出宏觀的工作建議)
+   - ## 💡 助理全局觀察
+     (分析使用者的工作步調，提供貼心的建議、健康關懷或正向反饋)
+3. 報告內文請維持簡潔、專業與條理。`;
+
+        const userPrompt = `主題分類：${subject.name}
+建立時間：${subject.created_at}
+
+【跨筆記本整合筆記】：
+${notesText}`;
+
+        const selectedValue = localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-2.5-flash';
+        const modelInfo = MODEL_REGISTRY[selectedValue] || { id: selectedValue };
+        const cleanModelName = modelInfo.id.replace('models/', '');
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModelName}:generateContent?key=${apiKey}`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: `${systemPrompt}\n\n${userPrompt}`
+                    }]
+                }]
+            })
+        });
+        
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || '呼叫 API 時發生未知錯誤');
+        }
+        
+        const reportMarkdown = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!reportMarkdown) {
+            throw new Error('API 回傳的格式不正確或內容為空');
+        }
+        
+        subject.report = reportMarkdown;
+        subject.report_created_at = formatDateTime(new Date());
+        
+        saveSubjectsToStorage();
+        showDashboard('subject', subjectId);
+        alert('🎉 AI 主題整合摘要報告生成成功！');
+        
+    } catch (error) {
+        console.error('Gemini API Error:', error);
+        alert(`主題整合報告生成失敗：\n${error.message}`);
+    } finally {
+        loadingOverlay.style.display = 'none';
+    }
+}
+
+// Generate AI Report for Folder
+async function generateFolderReport(folderId) {
+    const apiKey = localStorage.getItem(STORAGE_KEYS.API_KEY);
+    if (!apiKey) {
+        alert('未偵測到 API 金鑰，請先在「系統與 AI 設定」中輸入並儲存您的 Gemini API 金鑰！');
+        const settingsModal = document.getElementById('settings-modal');
+        if (settingsModal) settingsModal.style.display = 'flex';
+        return;
+    }
+    
+    const folder = folders.find(f => f.id === folderId);
+    if (!folder) return;
+    
+    const folderNotebooks = notebooks.filter(n => n.folderId === folderId);
+    if (folderNotebooks.length === 0) {
+        alert('此資料夾下沒有任何筆記本！');
+        return;
+    }
+    
+    const notebookIds = new Set(folderNotebooks.map(n => n.id));
+    const folderEntries = entries.filter(e => notebookIds.has(e.notebook_id));
+    if (folderEntries.length === 0) {
+        alert('此資料夾下沒有任何隨筆筆記！請先新增一些筆記內容再進行整理。');
+        return;
+    }
+    
+    loadingOverlay.style.display = 'flex';
+    
+    try {
+        let notesText = '';
+        folderNotebooks.forEach(nb => {
+            const nbEntries = folderEntries.filter(e => e.notebook_id === nb.id);
+            if (nbEntries.length > 0) {
+                notesText += `### 筆記本：${nb.title}\n`;
+                notesText += nbEntries.map(e => `[時間：${e.created_at}] ${e.content}`).join('\n');
+                notesText += '\n\n';
+            }
+        });
+        
+        const systemPrompt = `你是一位專業且貼心的隨身智能助理。以下是使用者在資料夾「${folder.name}」中多個筆記本內的隨手筆記。
+請你幫忙將這些筆記內容進行邏輯整合，理清條理，撰寫成一份精緻的資料夾整合報告。
+
+請嚴格遵循以下匯報格式要求：
+1. 請以「Markdown」格式進行輸出。
+2. 匯報結構必須包含：
+   - # 📂資料夾整合工作報告：${folder.name}
+   - ## 📋 資料夾內容概述
+     (簡短總結該資料夾下所有筆記本的統合內容)
+   - ## 🔍 分類重點條列
+     (將所有筆記內容按屬性或性質分類，使用列點方式寫出核心進度與記錄)
+   - ## 🚀 行動待辦與建議
+     (提煉出下一步明確的待辦清單與時程安排建議)
+   - ## 💡 助理貼心反饋
+     (以溫暖親切的助理語氣，分析使用者的工作步調，提醒注意休息與加油打氣)
+3. 報告內文請維持簡潔、專業與條理。`;
+
+        const userPrompt = `資料夾名稱：${folder.name}
+
+【整合隨筆列表】：
+${notesText}`;
+
+        const selectedValue = localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-2.5-flash';
+        const modelInfo = MODEL_REGISTRY[selectedValue] || { id: selectedValue };
+        const cleanModelName = modelInfo.id.replace('models/', '');
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModelName}:generateContent?key=${apiKey}`;
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: `${systemPrompt}\n\n${userPrompt}`
+                    }]
+                }]
+            })
+        });
+        
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.error?.message || '呼叫 API 時發生未知錯誤');
+        }
+        
+        const reportMarkdown = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!reportMarkdown) {
+            throw new Error('API 回傳的格式不正確或內容為空');
+        }
+        
+        folder.report = reportMarkdown;
+        folder.report_created_at = formatDateTime(new Date());
+        
+        saveFoldersToStorage();
+        showDashboard('folder', folderId);
+        alert('🎉 AI 資料夾整合摘要報告生成成功！');
+        
+    } catch (error) {
+        console.error('Gemini API Error:', error);
+        alert(`資料夾整合報告生成失敗：\n${error.message}`);
+    } finally {
+        loadingOverlay.style.display = 'none';
+    }
+}
+
+// Bind Subject Events
+const subjectHeaderDropdown = document.getElementById('subject-header-dropdown');
+const subjectActionsMenu = document.getElementById('subject-actions-menu');
+if (subjectHeaderDropdown && subjectActionsMenu) {
+    subjectHeaderDropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = subjectActionsMenu.style.display === 'block';
+        subjectActionsMenu.style.display = isOpen ? 'none' : 'block';
+        subjectHeaderDropdown.classList.toggle('open', !isOpen);
+    });
+}
+
+document.addEventListener('click', () => {
+    if (subjectActionsMenu) {
+        subjectActionsMenu.style.display = 'none';
+        if (subjectHeaderDropdown) subjectHeaderDropdown.classList.remove('open');
     }
 });
+
+const addSubjectBtn = document.getElementById('add-subject-btn');
+const subjectModal = document.getElementById('subject-modal');
+const closeSubjectModalBtn = document.getElementById('close-subject-modal-btn');
+const cancelSubjectModalBtn = document.getElementById('cancel-subject-modal-btn');
+const confirmSubjectModalBtn = document.getElementById('confirm-subject-modal-btn');
+const subjectNameInput = document.getElementById('subject-name-input');
+const subjectIconInput = document.getElementById('subject-icon-input');
+
+if (addSubjectBtn && subjectModal) {
+    addSubjectBtn.addEventListener('click', () => {
+        subjectNameInput.value = '';
+        subjectIconInput.value = '💡';
+        subjectModal.style.display = 'flex';
+        subjectNameInput.focus();
+    });
+}
+
+if (closeSubjectModalBtn) {
+    closeSubjectModalBtn.addEventListener('click', () => {
+        subjectModal.style.display = 'none';
+    });
+}
+
+if (cancelSubjectModalBtn) {
+    cancelSubjectModalBtn.addEventListener('click', () => {
+        subjectModal.style.display = 'none';
+    });
+}
+
+if (subjectModal) {
+    subjectModal.addEventListener('click', (e) => {
+        if (e.target === subjectModal) {
+            subjectModal.style.display = 'none';
+        }
+    });
+}
+
+document.querySelectorAll('.emoji-suggest-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if (subjectIconInput) subjectIconInput.value = btn.textContent;
+    });
+});
+
+if (confirmSubjectModalBtn) {
+    confirmSubjectModalBtn.addEventListener('click', () => {
+        const name = subjectNameInput.value.trim();
+        const icon = subjectIconInput.value.trim();
+        if (!name) {
+            alert('請輸入主題名稱！');
+            return;
+        }
+        createSubject(name, icon);
+        subjectModal.style.display = 'none';
+    });
+}
+
+const renameSubjectBtn = document.getElementById('rename-subject-btn');
+if (renameSubjectBtn) {
+    renameSubjectBtn.addEventListener('click', () => {
+        const activeSub = subjects.find(s => s.id === currentSubjectId);
+        if (!activeSub) return;
+        
+        const newName = prompt('請輸入主題分類的新名稱：', activeSub.name);
+        if (newName && newName.trim()) {
+            activeSub.name = newName.trim();
+            saveSubjectsToStorage();
+            renderSubjectsList();
+            showDashboard('subject', currentSubjectId);
+        }
+    });
+}
+
+const subjectSummaryBtn = document.getElementById('subject-summary-btn');
+if (subjectSummaryBtn) {
+    subjectSummaryBtn.addEventListener('click', () => {
+        generateSubjectReport(currentSubjectId);
+    });
+}
+
+const deleteSubjectBtn = document.getElementById('delete-subject-btn');
+if (deleteSubjectBtn) {
+    deleteSubjectBtn.addEventListener('click', () => {
+        if (subjects.length <= 1) {
+            alert('這是您唯一的筆記主題，無法刪除！');
+            return;
+        }
+        const activeSub = subjects.find(s => s.id === currentSubjectId);
+        if (confirm(`確定要刪除主題分類「${activeSub.name}」嗎？\n該主題下的所有資料夾與筆記本將會被移入「資源回收桶」！`)) {
+            const subNotebooks = notebooks.filter(n => n.subjectId === currentSubjectId);
+            subNotebooks.forEach(nb => {
+                deleteNotebook(nb.id);
+            });
+            folders = folders.filter(f => f.subjectId !== currentSubjectId);
+            saveFoldersToStorage();
+            
+            subjects = subjects.filter(s => s.id !== currentSubjectId);
+            saveSubjectsToStorage();
+            
+            selectSubject(subjects[0].id);
+        }
+    });
+}
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
