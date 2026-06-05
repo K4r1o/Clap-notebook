@@ -707,20 +707,6 @@ function renderNotebooksList() {
                     <i class="fa-solid ${folder.isCollapsed ? 'fa-folder' : 'fa-folder-open'} folder-icon"></i>
                     <span class="folder-name-text" title="雙擊或點擊重新命名按鈕可修改名稱">${escapeHtml(folder.name)}</span>
                 </div>
-                <div class="folder-actions">
-                    <button class="btn-folder-action btn-folder-summary" title="AI 資料夾整合摘要">
-                        <i class="fa-solid fa-wand-magic-sparkles"></i>
-                    </button>
-                    <button class="btn-folder-action rename-folder-btn" title="重新命名資料夾">
-                        <i class="fa-solid fa-pen"></i>
-                    </button>
-                    <button class="btn-folder-action add-notebook-to-folder" title="在此資料夾建立新筆記本">
-                        <i class="fa-solid fa-plus"></i>
-                    </button>
-                    <button class="btn-folder-action delete-folder" title="刪除資料夾（保留筆記本）">
-                        <i class="fa-regular fa-trash-can"></i>
-                    </button>
-                </div>
             </div>
             <div class="folder-notebooks">
                 <ul class="notebooks-list-inner" style="list-style: none;"></ul>
@@ -823,25 +809,7 @@ function renderNotebooksList() {
             }
         });
         
-        // Folder Summary button
-        folderEl.querySelector('.btn-folder-summary').addEventListener('click', (e) => {
-            e.stopPropagation();
-            selectFolderForDashboard(folder.id);
-        });
-        
-        // Add notebook directly inside folder
-        folderEl.querySelector('.add-notebook-to-folder').addEventListener('click', (e) => {
-            e.stopPropagation();
-            createNotebook(folder.id);
-        });
-        
-        // Delete folder
-        folderEl.querySelector('.delete-folder').addEventListener('click', (e) => {
-            e.stopPropagation();
-            if (confirm(`確定要刪除資料夾「${folder.name}」嗎？（資料夾內的筆記本將會被移出至未分類）`)) {
-                deleteFolder(folder.id);
-            }
-        });
+        // Folder double click to enter rename (optional, we keep context menu)
         
         const innerList = folderEl.querySelector('.notebooks-list-inner');
         sortedFolderNotebooks.forEach(notebook => {
@@ -2729,8 +2697,16 @@ const handleGoogleLogin = () => {
         alert('請先在 app.js 頂端設定 GOOGLE_CLIENT_ID 才能使用 Google 登入功能！');
         return;
     }
+    
+    // If not initialized yet, try to initialize it now
+    if (!googleTokenClient && typeof google !== 'undefined' && google.accounts) {
+        gisLoaded();
+    }
+    
     if (googleTokenClient) {
         googleTokenClient.requestAccessToken({prompt: 'consent'});
+    } else {
+        alert('Google 登入服務仍在載入中或被瀏覽器阻擋，請稍候再試。若持續發生，請檢查是否有阻擋廣告的擴充功能，或重新整理頁面。');
     }
 };
 
@@ -3133,6 +3109,15 @@ function showDashboard(type, id) {
     if (workspace) workspace.style.display = 'none';
     dashboardState.style.display = 'flex';
     
+    const renameBtn = document.getElementById('dashboard-rename-btn');
+    const addNotebookBtn = document.getElementById('dashboard-add-notebook-btn');
+    const deleteBtn = document.getElementById('dashboard-delete-btn');
+    
+    // Default hide the extra actions
+    if (renameBtn) renameBtn.style.display = 'none';
+    if (addNotebookBtn) addNotebookBtn.style.display = 'none';
+    if (deleteBtn) deleteBtn.style.display = 'none';
+    
     let title = '';
     let report = null;
     let foldersCount = 0;
@@ -3195,6 +3180,31 @@ function showDashboard(type, id) {
         document.getElementById('dashboard-meta').textContent = `包含 ${notebooksCount} 本筆記`;
         document.getElementById('stat-card-folders').style.display = 'none';
         document.getElementById('stat-card-notes').style.display = 'flex';
+        
+        // Show folder specific actions
+        if (renameBtn) {
+            renameBtn.style.display = 'flex';
+            renameBtn.onclick = () => {
+                const newName = prompt('請輸入新的資料夾名稱：', folder.name);
+                if (newName && newName.trim() !== '' && newName.trim() !== folder.name) {
+                    renameFolder(folder.id, newName.trim());
+                }
+            };
+        }
+        
+        if (addNotebookBtn) {
+            addNotebookBtn.style.display = 'flex';
+            addNotebookBtn.onclick = () => createNotebook(folder.id);
+        }
+        
+        if (deleteBtn) {
+            deleteBtn.style.display = 'flex';
+            deleteBtn.onclick = () => {
+                if (confirm(`確定要刪除資料夾「${folder.name}」嗎？（資料夾內的筆記本將會被移出至未分類）`)) {
+                    deleteFolder(folder.id);
+                }
+            };
+        }
         
         const aiBtn = document.getElementById('dashboard-ai-btn');
         aiBtn.onclick = () => generateFolderReport(id);

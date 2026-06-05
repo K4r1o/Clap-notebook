@@ -181,7 +181,16 @@
                             <p id="dashboard-meta" style="font-size: 0.9rem; color: var(--ink-muted); margin: 4px 0 0 0;">包含 X 個資料夾，Y 本筆記本，Z 條隨筆</p>
                         </div>
                     </div>
-                    <div class="dashboard-actions">
+                    <div class="dashboard-actions" style="display: flex; align-items: center; gap: 8px;">
+                        <button id="dashboard-rename-btn" class="btn-subject-tool" title="重新命名" style="display: none; background: rgba(255,255,255,0.05); color: var(--sidebar-text); width: 36px; height: 36px; border-radius: 8px; border: none; cursor: pointer; justify-content: center; align-items: center;">
+                            <i class="fa-solid fa-pen"></i>
+                        </button>
+                        <button id="dashboard-add-notebook-btn" class="btn-subject-tool" title="新增筆記本" style="display: none; background: rgba(255,255,255,0.05); color: var(--sidebar-text); width: 36px; height: 36px; border-radius: 8px; border: none; cursor: pointer; justify-content: center; align-items: center;">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                        <button id="dashboard-delete-btn" class="btn-subject-tool" title="刪除" style="display: none; background: rgba(255,255,255,0.05); color: var(--sidebar-text); width: 36px; height: 36px; border-radius: 8px; border: none; cursor: pointer; justify-content: center; align-items: center;">
+                            <i class="fa-regular fa-trash-can"></i>
+                        </button>
                         <button id="dashboard-ai-btn" class="btn btn-primary" style="display: flex; align-items: center; gap: 8px;">
                             <i class="fa-solid fa-wand-magic-sparkles"></i> 生成 AI 整合摘要
                         </button>
