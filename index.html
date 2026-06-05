@@ -245,20 +245,22 @@
             <div id="workspace" class="workspace" style="display: none;">
                 <!-- Workspace Header -->
                 <header class="workspace-header">
-                    <div style="display: flex; align-items: center; gap: 12px; flex-grow: 1;">
+                    <!-- Left: Title and Meta -->
+                    <div style="display: flex; align-items: center; gap: 12px; flex-grow: 1; min-width: 0;">
                         <button id="mobile-menu-btn-workspace" class="mobile-menu-btn" style="display: none; background: none; border: none; font-size: 1.5rem; color: var(--ink-color); cursor: pointer; padding: 4px;"><i class="fa-solid fa-bars"></i></button>
-                        <div class="notebook-info">
-                        <div class="title-edit-container">
-                            <h2 id="current-notebook-title" contenteditable="true" title="點擊編輯標題"></h2>
-                            <i class="fa-solid fa-pen title-edit-icon"></i>
-                        </div>
-                        <div class="notebook-meta">
-                            <span class="meta-item"><i class="fa-regular fa-clock"></i> 建立於 <span id="current-notebook-time"></span></span>
-                            <span id="current-notebook-status" class="status-badge status-active">筆記中</span>
+                        <div class="notebook-info" style="min-width: 0;">
+                            <div class="title-edit-container">
+                                <h2 id="current-notebook-title" contenteditable="true" title="點擊編輯標題"></h2>
+                                <i class="fa-solid fa-pen title-edit-icon"></i>
+                            </div>
+                            <div class="notebook-meta">
+                                <span class="meta-item"><i class="fa-regular fa-clock"></i> 建立於 <span id="current-notebook-time"></span></span>
+                                <span id="current-notebook-status" class="status-badge status-active">筆記中</span>
+                            </div>
                         </div>
                     </div>
-                    
-                    <div class="workspace-actions" style="display: flex; align-items: center; gap: 8px;">
+                    <!-- Right: Action Buttons -->
+                    <div class="workspace-actions" style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
                         <button id="workspace-lock-btn" class="btn-subject-tool" title="啟動防誤刪保護" style="background: rgba(255,255,255,0.05); color: var(--sidebar-text); width: 36px; height: 36px; border-radius: 8px; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center;">
                             <i class="fa-solid fa-lock-open"></i>
                         </button>
