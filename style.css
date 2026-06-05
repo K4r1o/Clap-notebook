@@ -233,6 +233,18 @@ body {
     height: 100vh;
     overflow: hidden;
     line-height: 1.6;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+}
+
+/* Enable selection only where appropriate */
+input, textarea, [contenteditable="true"], .report-content, .paper-content, #dashboard-report-content {
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
 }
 
 /* Scrollbar Customization */

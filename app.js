@@ -2897,6 +2897,14 @@ document.addEventListener('click', (e) => {
     }
 });
 
+// Prevent browser default right-click menu except in editable elements
+document.addEventListener('contextmenu', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable) {
+        return;
+    }
+    e.preventDefault();
+});
+
 // --- Subject & Dashboard Functions ---
 
 function downloadTextFile(content, filename) {
