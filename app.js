@@ -1783,6 +1783,7 @@ function updateWorkspaceView() {
             showDashboard('subject', currentSubjectId);
         } else {
             emptyState.style.display = 'flex';
+            if (typeof updateGreeting === 'function') updateGreeting();
             if (dashboardState) dashboardState.style.display = 'none';
         }
         return;
@@ -3584,4 +3585,64 @@ if (logoBtn) {
         updateWorkspaceView();
         if (typeof closeMobileNav === 'function') closeMobileNav();
     });
+}
+
+// --- Dynamic Greeting Logic ---
+const greetings = {
+    morning: [ // 05:00 - 11:00
+        "早安！今天第一筆給自己的備忘是？",
+        "咖啡還燙，先把今天的目標抓出來。",
+        "早晨的腦袋最乾淨，適合寫點好東西。",
+        "熱水還在燒...",
+        "昨晚沒解開的結，今天換個姿勢試試看。",
+        "新的一天，空白頁已經幫你準備好了。",
+        "晨光不錯，來排一下今天的作戰計畫吧。",
+        "抓到你了，閃過腦海的那句話！"
+    ],
+    afternoon: [ // 11:00 - 17:00
+        "先記錄一下...茶沒這麼快涼！",
+        "水滾了，想法也差不多該沉澱了。",
+        "留白的時間，剛好用來寫點什麼。",
+        "世界的腳步很快，但這裡可以慢慢來。",
+        "抓到你了，閃過腦海的那句話！",
+        "把零散的片刻，拼湊成你想要的樣子。",
+        "今天，遇見了什麼想留住的光景？",
+        "餐點還在製作中...趁機敲幾個字吧？",
+        "不急，先讓思緒飛一會兒。"
+    ],
+    evening: [ // 17:00 - 22:00
+        "一天的扣額用得差不多了，來做個小結吧。",
+        "把白天的雜事留在這裡，等一下好好吃飯。",
+        "今天就先按個暫停吧...來這裡吐個槽。",
+        "這靈感很貴，建議立刻封存。",
+        "不管是什麼怪想法，我都不會判你的罪。",
+        "再不記下來，大腦就要自動格式化了。"
+    ],
+    night: [ // 22:00 - 05:00
+        "世界的腳步很快，但這裡可以慢慢來。",
+        "這個時間還醒著，是在跟哪個靈感拔河？",
+        "沒關係，不管是碎碎念還是大計畫，我都聽。",
+        "把白天的面具摘掉，這裡隨便你寫。",
+        "晚安，來這清理一下腦袋，待會的夢境才會比較輕盈。"
+    ]
+};
+
+function updateGreeting() {
+    const hour = new Date().getHours();
+    let pool = [];
+    if (hour >= 5 && hour < 11) {
+        pool = greetings.morning;
+    } else if (hour >= 11 && hour < 17) {
+        pool = greetings.afternoon;
+    } else if (hour >= 17 && hour < 22) {
+        pool = greetings.evening;
+    } else {
+        pool = greetings.night;
+    }
+    
+    const randomGreeting = pool[Math.floor(Math.random() * pool.length)];
+    const greetingEl = document.getElementById('empty-state-greeting');
+    if (greetingEl) {
+        greetingEl.textContent = randomGreeting;
+    }
 }
