@@ -3067,6 +3067,18 @@ function renderSubjectsList() {
         if (nameEl) nameEl.textContent = activeSub.name;
         if (iconEl) iconEl.textContent = activeSub.icon || '📝';
     }
+    
+    // Handle Home State Styling and Sidebar Visibility
+    const logoBtn = document.getElementById('subject-logo');
+    const sidebar = document.querySelector('.sidebar');
+    
+    if (currentSubjectId === null) {
+        if (logoBtn) logoBtn.classList.add('active');
+        if (sidebar) sidebar.style.display = 'none';
+    } else {
+        if (logoBtn) logoBtn.classList.remove('active');
+        if (sidebar) sidebar.style.display = '';
+    }
 }
 
 // Select Active Subject

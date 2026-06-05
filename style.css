@@ -2668,7 +2668,8 @@ body[data-theme="kraft"] {
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
-.subject-logo:hover {
+.subject-logo:hover,
+.subject-logo.active {
     border-radius: 16px;
     background: var(--sidebar-accent);
     color: white;
