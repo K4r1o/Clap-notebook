@@ -3039,7 +3039,9 @@ function showDashboard(type, id) {
         activeEntriesCount = subEntries.filter(e => activeNotebooks.some(n => n.id === e.notebook_id)).length;
         finalizedEntriesCount = subEntries.filter(e => finalizedNotebooks.some(n => n.id === e.notebook_id)).length;
         
-        document.getElementById('dashboard-meta').textContent = `包含 ${foldersCount} 個資料夾，${entriesCount} 條隨筆`;
+        document.getElementById('dashboard-meta').textContent = `包含 ${foldersCount} 個資料夾`;
+        document.getElementById('stat-card-folders').style.display = 'flex';
+        document.getElementById('stat-card-notes').style.display = 'none';
         
         const aiBtn = document.getElementById('dashboard-ai-btn');
         aiBtn.onclick = () => generateSubjectReport(id);
@@ -3066,6 +3068,8 @@ function showDashboard(type, id) {
         finalizedEntriesCount = folderEntries.filter(e => finalizedNotebooks.some(n => n.id === e.notebook_id)).length;
         
         document.getElementById('dashboard-meta').textContent = `包含 ${entriesCount} 條隨筆`;
+        document.getElementById('stat-card-folders').style.display = 'none';
+        document.getElementById('stat-card-notes').style.display = 'flex';
         
         const aiBtn = document.getElementById('dashboard-ai-btn');
         aiBtn.onclick = () => generateFolderReport(id);

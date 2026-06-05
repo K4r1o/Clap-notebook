@@ -185,15 +185,15 @@
                 </header>
                 <div class="dashboard-body" style="display: flex; flex-direction: column; gap: 24px; flex-grow: 1;">
                     <!-- Stat cards -->
-                    <div class="dashboard-stats" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
-                        <div class="stat-card" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--report-border); border-radius: var(--border-radius); padding: 16px; display: flex; align-items: center; gap: 12px;">
+                    <div class="dashboard-stats" style="display: flex; gap: 16px;">
+                        <div id="stat-card-folders" class="stat-card" style="flex: 1; background: rgba(255, 255, 255, 0.4); border: 1px solid var(--report-border); border-radius: var(--border-radius); padding: 16px; display: flex; align-items: center; gap: 12px;">
                             <i class="fa-solid fa-folder-open" style="font-size: 2.2rem; color: var(--accent-color); opacity: 0.8;"></i>
                             <div class="stat-info" style="display: flex; flex-direction: column;">
                                 <span class="stat-num" id="stat-folders-count" style="font-size: 1.5rem; font-weight: 700; color: var(--ink-color);">0</span>
                                 <span class="stat-label" style="font-size: 0.8rem; color: var(--ink-muted); font-weight: 500;">資料夾</span>
                             </div>
                         </div>
-                        <div class="stat-card" style="background: rgba(255, 255, 255, 0.4); border: 1px solid var(--report-border); border-radius: var(--border-radius); padding: 16px; display: flex; align-items: center; gap: 12px;">
+                        <div id="stat-card-notes" class="stat-card" style="flex: 1; background: rgba(255, 255, 255, 0.4); border: 1px solid var(--report-border); border-radius: var(--border-radius); padding: 16px; display: flex; align-items: center; gap: 12px;">
                             <i class="fa-solid fa-pen-fancy" style="font-size: 2.2rem; color: var(--accent-color); opacity: 0.8;"></i>
                             <div class="stat-info" style="display: flex; flex-direction: column; flex-grow: 1;">
                                 <div style="display: flex; align-items: baseline; gap: 8px;">
@@ -590,7 +590,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=11"></script>
+    <script src="app.js?v=12"></script>
     <!-- PWA Service Worker Registration -->
     <script>
         if ('serviceWorker' in navigator) {
