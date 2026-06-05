@@ -2616,11 +2616,33 @@ async function syncToGoogleDrive() {
         
     } catch (err) {
         console.error("Google Drive Sync Error:", err);
-        updateGoogleSyncStatus('同步失敗。', false);
+        updateGoogleSyncStatus('同步失敗，請檢查網路連線或重新登入。', false);
+        if (syncStatusBadge) {
+            syncStatusBadge.className = 'sync-badge error';
+            syncStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 同步失敗';
+        }
     } finally {
         isSyncingToGoogle = false;
     }
 }
+
+// Force sync button
+document.addEventListener('DOMContentLoaded', () => {
+    const forceSyncBtn = document.getElementById('force-sync-btn');
+    if (forceSyncBtn) {
+        forceSyncBtn.addEventListener('click', async () => {
+            if (syncProvider !== 'google' || !googleAccessToken) {
+                alert('尚未登入 Google，無法強制同步。請先登入。');
+                return;
+            }
+            forceSyncBtn.disabled = true;
+            forceSyncBtn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> 同步中...';
+            await syncToGoogleDrive();
+            forceSyncBtn.disabled = false;
+            forceSyncBtn.innerHTML = '<i class="fa-solid fa-rotate"></i> 立即強制同步到雲端';
+        });
+    }
+});
 
 async function loadFromGoogleDrive() {
     if (syncProvider !== 'google' || !googleAccessToken || !gapiInited) return;
