@@ -3061,14 +3061,15 @@ function showDashboard(type, id) {
         
         const notebookIds = new Set(folderNotebooks.map(n => n.id));
         const folderEntries = entries.filter(e => notebookIds.has(e.notebook_id));
-        entriesCount = folderEntries.length;
         
         const activeNotebooks = folderNotebooks.filter(n => n.status !== 'finalized');
         const finalizedNotebooks = folderNotebooks.filter(n => n.status === 'finalized');
-        activeEntriesCount = folderEntries.filter(e => activeNotebooks.some(n => n.id === e.notebook_id)).length;
-        finalizedEntriesCount = folderEntries.filter(e => finalizedNotebooks.some(n => n.id === e.notebook_id)).length;
         
-        document.getElementById('dashboard-meta').textContent = `包含 ${entriesCount} 條隨筆`;
+        entriesCount = notebooksCount;
+        activeEntriesCount = activeNotebooks.length;
+        finalizedEntriesCount = finalizedNotebooks.length;
+        
+        document.getElementById('dashboard-meta').textContent = `包含 ${notebooksCount} 本筆記`;
         document.getElementById('stat-card-folders').style.display = 'none';
         document.getElementById('stat-card-notes').style.display = 'flex';
         
