@@ -2866,3 +2866,103 @@ body[data-theme="kraft"] .stat-card {
     background: rgba(0, 0, 0, 0.1) !important;
 }
 
+/* =========================================
+   Mobile Responsive Design (Max 768px)
+   ========================================= */
+@media (max-width: 768px) {
+    /* Base Container Changes */
+    .app-container {
+        position: relative;
+        overflow-x: hidden;
+        width: 100vw;
+    }
+    
+    /* Show mobile menu buttons */
+    .mobile-menu-btn {
+        display: block !important;
+    }
+
+    /* Sidebars off-canvas logic */
+    .subject-bar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 1000;
+        transform: translateX(-100%);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .sidebar {
+        position: fixed;
+        left: 72px; /* Width of subject bar */
+        top: 0;
+        bottom: 0;
+        width: 280px;
+        max-width: calc(100vw - 72px);
+        z-index: 999;
+        transform: translateX(-100vw);
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        box-shadow: 4px 0 16px rgba(0,0,0,0.1);
+        border-right: 1px solid var(--sidebar-border);
+    }
+
+    /* Main Panel takes full width */
+    .main-panel {
+        width: 100vw;
+        flex: none;
+    }
+
+    /* When mobile nav is open */
+    body.mobile-nav-open .subject-bar {
+        transform: translateX(0);
+    }
+    
+    body.mobile-nav-open .sidebar {
+        transform: translateX(0);
+    }
+    
+    body.mobile-nav-open .mobile-nav-backdrop {
+        display: block !important;
+        opacity: 1;
+    }
+
+    /* Dashboard & Workspace internal adjustments */
+    .dashboard-header {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 16px;
+    }
+    
+    .dashboard-stats {
+        grid-template-columns: 1fr !important;
+    }
+    
+    /* Fix the fixed widths of modals & reports for mobile */
+    .modal-content, .report-panel {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    
+    .notebook-info {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+    }
+    
+    .workspace-header {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 16px;
+    }
+    
+    .workspace-actions {
+        width: 100%;
+    }
+    
+    #finalize-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+

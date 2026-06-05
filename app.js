@@ -1752,6 +1752,7 @@ function escapeHtml(str) {
 function selectNotebook(id) {
     currentNotebookId = id;
     const notebook = notebooks.find(n => n.id === id);
+    if (typeof closeMobileNav === 'function') closeMobileNav();
     if (!notebook) {
         currentNotebookId = null;
         updateWorkspaceView();
@@ -3511,3 +3512,41 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 });
+
+// --- Mobile Navigation Logic ---
+const mobileMenuBtnDashboard = document.getElementById('mobile-menu-btn-dashboard');
+const mobileMenuBtnWorkspace = document.getElementById('mobile-menu-btn-workspace');
+const mobileNavBackdrop = document.getElementById('mobile-nav-backdrop');
+
+function toggleMobileNav() {
+    document.body.classList.toggle('mobile-nav-open');
+}
+
+function closeMobileNav() {
+    document.body.classList.remove('mobile-nav-open');
+}
+
+if (mobileMenuBtnDashboard) mobileMenuBtnDashboard.addEventListener('click', toggleMobileNav);
+if (mobileMenuBtnWorkspace) mobileMenuBtnWorkspace.addEventListener('click', toggleMobileNav);
+if (mobileNavBackdrop) mobileNavBackdrop.addEventListener('click', closeMobileNav);
+
+// Touch Swipe Gestures for Discord-style Sidebar
+let touchStartX = 0;
+document.addEventListener('touchstart', e => {
+    touchStartX = e.changedTouches[0].screenX;
+}, { passive: true });
+
+document.addEventListener('touchend', e => {
+    let touchEndX = e.changedTouches[0].screenX;
+    const swipeThreshold = 50; // minimum distance
+    
+    // Swipe Right to Open (Only if started near left edge)
+    if (touchEndX - touchStartX > swipeThreshold && touchStartX < 40) {
+        document.body.classList.add('mobile-nav-open');
+    }
+    
+    // Swipe Left to Close
+    if (touchStartX - touchEndX > swipeThreshold && document.body.classList.contains('mobile-nav-open')) {
+        closeMobileNav();
+    }
+}, { passive: true });

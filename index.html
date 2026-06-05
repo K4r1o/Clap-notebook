@@ -13,7 +13,7 @@
     <!-- Marked.js for markdown rendering -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <!-- Stylesheet -->
-    <link rel="stylesheet" href="style.css?v=7">
+    <link rel="stylesheet" href="style.css?v=8">
 </head>
 <body>
     <!-- Mandatory Login Overlay -->
@@ -36,6 +36,9 @@
             </p>
         </div>
     </div>
+
+    <!-- Mobile Navigation Backdrop -->
+    <div id="mobile-nav-backdrop" class="mobile-nav-backdrop" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 900; opacity: 0; transition: opacity 0.3s ease;"></div>
 
     <div class="app-container">
         <!-- Subject Bar (Layer 1) -->
@@ -159,9 +162,12 @@
             <!-- Subject/Folder Dashboard View -->
             <div id="dashboard-state" class="dashboard-state" style="display: none; flex-direction: column; height: 100%; width: 100%; padding: 32px; box-sizing: border-box; overflow-y: auto;">
                 <header class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--header-border); padding-bottom: 16px; margin-bottom: 24px;">
-                    <div class="dashboard-info">
-                        <h2 id="dashboard-title" style="font-family: var(--font-serif); font-size: 2rem; margin: 0; color: var(--accent-color);">主題名稱</h2>
-                        <p id="dashboard-meta" style="font-size: 0.9rem; color: var(--ink-muted); margin: 4px 0 0 0;">包含 X 個資料夾，Y 本筆記本，Z 條隨筆</p>
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <button id="mobile-menu-btn-dashboard" class="mobile-menu-btn" style="display: none; background: none; border: none; font-size: 1.5rem; color: var(--ink-color); cursor: pointer; padding: 4px;"><i class="fa-solid fa-bars"></i></button>
+                        <div class="dashboard-info">
+                            <h2 id="dashboard-title" style="font-family: var(--font-serif); font-size: 2rem; margin: 0; color: var(--accent-color);">主題名稱</h2>
+                            <p id="dashboard-meta" style="font-size: 0.9rem; color: var(--ink-muted); margin: 4px 0 0 0;">包含 X 個資料夾，Y 本筆記本，Z 條隨筆</p>
+                        </div>
                     </div>
                     <div class="dashboard-actions">
                         <button id="dashboard-ai-btn" class="btn btn-primary" style="display: flex; align-items: center; gap: 8px;">
@@ -218,7 +224,9 @@
             <div id="workspace" class="workspace" style="display: none;">
                 <!-- Workspace Header -->
                 <header class="workspace-header">
-                    <div class="notebook-info">
+                    <div style="display: flex; align-items: center; gap: 12px; flex-grow: 1;">
+                        <button id="mobile-menu-btn-workspace" class="mobile-menu-btn" style="display: none; background: none; border: none; font-size: 1.5rem; color: var(--ink-color); cursor: pointer; padding: 4px;"><i class="fa-solid fa-bars"></i></button>
+                        <div class="notebook-info">
                         <div class="title-edit-container">
                             <h2 id="current-notebook-title" contenteditable="true" title="點擊編輯標題"></h2>
                             <i class="fa-solid fa-pen title-edit-icon"></i>
@@ -574,7 +582,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=7"></script>
+    <script src="app.js?v=8"></script>
     <!-- Google Identity Services -->
     <script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
     <!-- Google APIs -->
