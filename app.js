@@ -874,9 +874,6 @@ function renderNotebooksList() {
                     <span class="folder-name-text">未分類筆記</span>
                 </div>
                 <div class="folder-actions">
-                    <button class="btn-folder-action btn-folder-summary" title="AI 資料夾整合摘要">
-                        <i class="fa-solid fa-wand-magic-sparkles"></i>
-                    </button>
                     <button class="btn-folder-action add-notebook-to-folder" title="在此新增筆記本">
                         <i class="fa-solid fa-plus"></i>
                     </button>
@@ -907,12 +904,6 @@ function renderNotebooksList() {
         folderEl.querySelector('.add-notebook-to-folder').addEventListener('click', (e) => {
             e.stopPropagation();
             createNotebook(null);
-        });
-        
-        // AI Summary
-        folderEl.querySelector('.btn-folder-summary').addEventListener('click', (e) => {
-            e.stopPropagation();
-            alert('未分類筆記的專屬摘要功能即將推出！建議您可以先將筆記分類到資料夾中再進行摘要。');
         });
         
         // Drag and drop listeners
