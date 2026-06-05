@@ -2890,6 +2890,11 @@ window.addEventListener('keydown', (e) => {
 });
 
 // Dismiss context menu on click outside
+document.addEventListener('click', (e) => {
+    const ctxMenu = document.getElementById('custom-context-menu');
+    if (ctxMenu && !e.target.closest('#custom-context-menu')) {
+        ctxMenu.style.display = 'none';
+    }
 });
 
 // --- Subject & Dashboard Functions ---
