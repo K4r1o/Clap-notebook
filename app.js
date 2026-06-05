@@ -793,10 +793,13 @@ function renderNotebooksList() {
             enableRename();
         });
  
-        folderEl.querySelector('.rename-folder-btn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            enableRename();
-        });
+        const renameFolderBtn = folderEl.querySelector('.rename-folder-btn');
+        if (renameFolderBtn) {
+            renameFolderBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                enableRename();
+            });
+        }
  
         folderNameSpan.addEventListener('blur', () => {
             folderNameSpan.contentEditable = "false";
