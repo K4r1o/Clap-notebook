@@ -1,4 +1,4 @@
-const CACHE_NAME = 'will-ai-cache-v2';
+const CACHE_NAME = 'will-ai-cache-v3';
 const urlsToCache = [
   './',
   './index.html',
