@@ -1,0 +1,23 @@
+{
+  "name": "Will AI Notebook",
+  "short_name": "Will AI",
+  "description": "Your AI-powered notebook.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f2ebd9",
+  "theme_color": "#543a25",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='192' height='192'><rect width='192' height='192' fill='%23543a25'/><text x='50%' y='50%' font-size='64' text-anchor='middle' alignment-baseline='middle' fill='white' font-family='sans-serif'>W</text></svg>",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512'><rect width='512' height='512' fill='%23543a25'/><text x='50%' y='50%' font-size='160' text-anchor='middle' alignment-baseline='middle' fill='white' font-family='sans-serif'>W</text></svg>",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
