@@ -258,7 +258,13 @@
                         </div>
                     </div>
                     
-                    <div class="workspace-actions">
+                    <div class="workspace-actions" style="display: flex; align-items: center; gap: 8px;">
+                        <button id="workspace-lock-btn" class="btn-subject-tool" title="啟動防誤刪保護" style="background: rgba(255,255,255,0.05); color: var(--sidebar-text); width: 36px; height: 36px; border-radius: 8px; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center;">
+                            <i class="fa-solid fa-lock-open"></i>
+                        </button>
+                        <button id="workspace-delete-btn" class="btn-subject-tool" title="刪除筆記本" style="background: rgba(255,255,255,0.05); color: var(--sidebar-text); width: 36px; height: 36px; border-radius: 8px; border: none; cursor: pointer; display: flex; justify-content: center; align-items: center;">
+                            <i class="fa-regular fa-trash-can"></i>
+                        </button>
                         <button id="finalize-btn" class="btn btn-primary">
                             <i class="fa-solid fa-wand-magic-sparkles"></i> 結束筆記並生成匯報
                         </button>

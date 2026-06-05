@@ -980,12 +980,6 @@ function createNotebookLI(notebook) {
                 </span>
             </div>
         </div>
-        <button class="btn-lock-notebook" title="${notebook.isProtected ? '解除防刪保護' : '啟動防刪保護'}">
-            <i class="fa-solid ${notebook.isProtected ? 'fa-lock' : 'fa-lock-open'}"></i>
-        </button>
-        <button class="btn-delete-notebook" title="刪除筆記本">
-            <i class="fa-regular fa-trash-can"></i>
-        </button>
     `;
     
     // Toggle checkbox on clicking checkbox itself (Shift+Click support)
@@ -1002,8 +996,8 @@ function createNotebookLI(notebook) {
     
     // Select Notebook click
     li.addEventListener('click', (e) => {
-        // If clicking actions or checkbox, do nothing
-        if (e.target.closest('.btn-delete-notebook') || e.target.closest('.btn-lock-notebook') || e.target.closest('.notebook-checkbox-wrapper')) return;
+        // If clicking checkbox, do nothing special
+        if (e.target.closest('.notebook-checkbox-wrapper')) return;
         
         if (isBulkSelectMode) {
             // In bulk select mode, clicking the item toggles the checkbox
@@ -1017,23 +1011,29 @@ function createNotebookLI(notebook) {
         }
     });
     
-    // Lock Notebook toggle
-    li.querySelector('.btn-lock-notebook').addEventListener('click', (e) => {
-        e.stopPropagation();
-        toggleNotebookLock(notebook.id);
-    });
+    // Lock Notebook toggle (sidebar button - still kept for quick access via context menu)
+    const lockBtn = li.querySelector('.btn-lock-notebook');
+    if (lockBtn) {
+        lockBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleNotebookLock(notebook.id);
+        });
+    }
     
-    // Delete Notebook click
-    li.querySelector('.btn-delete-notebook').addEventListener('click', (e) => {
-        e.stopPropagation();
-        if (notebook.isProtected) {
-            alert(`此筆記本已啟動防誤刪保護，無法刪除！請先解除鎖定。`);
-            return;
-        }
-        if (confirm(`您確定要刪除「${notebook.title}」嗎？這會清除該筆記本內的所有內容且移至回收桶。`)) {
-            deleteNotebook(notebook.id);
-        }
-    });
+    // Delete Notebook click (sidebar button)
+    const deleteBtn = li.querySelector('.btn-delete-notebook');
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (notebook.isProtected) {
+                alert('此筆記本已啟動防誤刪保護，無法刪除！請先解除鎖定。');
+                return;
+            }
+            if (confirm(`您確定要刪除「${notebook.title}」嗎？這會清除該筆記本內的所有內容且移至回收桶。`)) {
+                deleteNotebook(notebook.id);
+            }
+        });
+    }
     
     return li;
 }
@@ -1924,6 +1924,36 @@ function updateWorkspaceView() {
     
     // Render Entries
     renderEntries();
+    
+    // Update workspace header lock/delete buttons
+    const workspaceLockBtn = document.getElementById('workspace-lock-btn');
+    const workspaceDeleteBtn = document.getElementById('workspace-delete-btn');
+    
+    if (workspaceLockBtn) {
+        const lockIcon = workspaceLockBtn.querySelector('i');
+        if (notebook.isProtected) {
+            lockIcon.className = 'fa-solid fa-lock';
+            workspaceLockBtn.title = '解除防誤刪保護';
+            workspaceLockBtn.style.color = '#f5a623';
+        } else {
+            lockIcon.className = 'fa-solid fa-lock-open';
+            workspaceLockBtn.title = '啟動防誤刪保護';
+            workspaceLockBtn.style.color = 'var(--sidebar-text)';
+        }
+        workspaceLockBtn.onclick = () => toggleNotebookLock(notebook.id);
+    }
+    
+    if (workspaceDeleteBtn) {
+        workspaceDeleteBtn.onclick = () => {
+            if (notebook.isProtected) {
+                alert('此筆記本已啟動防誤刪保護，無法刪除！請先解除鎖定。');
+                return;
+            }
+            if (confirm(`您確定要刪除「${notebook.title}」嗎？這會清除該筆記本內的所有內容且移至回收桶。`)) {
+                deleteNotebook(notebook.id);
+            }
+        };
+    }
     
     // Show Report Panel if finalized
     if (isFinalized && notebook.report) {
