@@ -2357,13 +2357,14 @@ function gisLoaded() {
             }
             googleAccessToken = tokenResponse.access_token;
             localStorage.setItem(STORAGE_KEYS.GOOGLE_TOKEN, googleAccessToken);
-            updateGoogleSyncStatus('登入成功，正在同步...', true);
+            updateGoogleSyncStatus('登入成功，正在從雲端載入資料...', true);
             
             // Hide full-screen overlay when logged in successfully
             const overlay = document.getElementById('login-overlay');
             if (overlay) overlay.style.display = 'none';
             
-            syncToGoogleDrive();
+            // CRITICAL FIX: Must load from drive on fresh login, not sync to it!
+            loadFromGoogleDrive();
         },
     });
     gisInited = true;
