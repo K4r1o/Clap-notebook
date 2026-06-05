@@ -733,6 +733,7 @@ function renderNotebooksList() {
             // If clicking buttons or content is being edited, don't toggle collapse
             if (e.target.closest('.btn-folder-action') || folderEl.querySelector('.folder-name-text').isContentEditable) return;
             toggleFolderCollapse(folder.id);
+            selectFolderForDashboard(folder.id);
         });
         
         // Drag and drop listeners on folder header
