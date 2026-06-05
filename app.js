@@ -855,21 +855,104 @@ function renderNotebooksList() {
     // 2. Render Uncategorized Notebooks (Unclassified) under current subject
     const uncategorizedNotebooks = notebooks.filter(nb => nb.subjectId === currentSubjectId && (!nb.folderId || !folders.some(f => f.id === nb.folderId)));
     if (uncategorizedNotebooks.length > 0 || subjectFolders.length === 0) {
-        // If there are folders, show an "Uncategorized" title, else just render notebooks
-        if (subjectFolders.length > 0) {
-            const titleEl = document.createElement('div');
-            titleEl.className = 'section-title';
-            titleEl.style.marginTop = '16px';
-            titleEl.style.marginBottom = '8px';
-            titleEl.innerHTML = `<span>未分類筆記</span>`;
-            notebooksList.appendChild(titleEl);
-        }
+        const folderId = 'uncategorized';
+        const isCollapsed = localStorage.getItem('uncategorized_collapsed') === 'true';
+        const isFolderActive = currentFolderId === null && subjectFolders.length > 0; // Wait, dashboard uses currentFolderId. We can say it's active if no folder is selected but there are folders.
+        // Or we can just let currentFolderId === 'uncategorized' in the future. For now:
+        const isActiveClass = currentFolderId === 'uncategorized' ? 'active' : '';
+        const activeStyle = currentFolderId === 'uncategorized' ? 'background-color: var(--sidebar-hover); border-left: 3px solid var(--sidebar-accent);' : '';
         
+        const folderEl = document.createElement('div');
+        folderEl.className = `folder-item ${isCollapsed ? 'collapsed' : ''}`;
+        folderEl.dataset.id = folderId;
+        
+        folderEl.innerHTML = `
+            <div class="folder-header ${isActiveClass}" data-id="${folderId}" style="${activeStyle}">
+                <div class="folder-info">
+                    <i class="fa-solid fa-chevron-down folder-toggle-arrow"></i>
+                    <i class="fa-solid ${isCollapsed ? 'fa-folder' : 'fa-folder-open'} folder-icon"></i>
+                    <span class="folder-name-text">未分類筆記</span>
+                </div>
+                <div class="folder-actions">
+                    <button class="btn-folder-action btn-folder-summary" title="AI 資料夾整合摘要">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                    </button>
+                    <button class="btn-folder-action add-notebook-to-folder" title="在此新增筆記本">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="folder-notebooks">
+                <ul class="notebooks-list-inner" style="list-style: none;"></ul>
+            </div>
+        `;
+        
+        const folderHeader = folderEl.querySelector('.folder-header');
+        folderHeader.addEventListener('click', (e) => {
+            if (e.target.closest('.btn-folder-action')) return;
+            const willCollapse = !folderEl.classList.contains('collapsed');
+            if (willCollapse) {
+                folderEl.classList.add('collapsed');
+                localStorage.setItem('uncategorized_collapsed', 'true');
+                folderHeader.querySelector('.folder-icon').classList.replace('fa-folder-open', 'fa-folder');
+            } else {
+                folderEl.classList.remove('collapsed');
+                localStorage.setItem('uncategorized_collapsed', 'false');
+                folderHeader.querySelector('.folder-icon').classList.replace('fa-folder', 'fa-folder-open');
+            }
+            selectFolderForDashboard(null); // Select uncategorized (represented as null in dashboard logic)
+        });
+        
+        // Add notebook
+        folderEl.querySelector('.add-notebook-to-folder').addEventListener('click', (e) => {
+            e.stopPropagation();
+            createNotebook(null);
+        });
+        
+        // AI Summary
+        folderEl.querySelector('.btn-folder-summary').addEventListener('click', (e) => {
+            e.stopPropagation();
+            alert('未分類筆記的專屬摘要功能即將推出！建議您可以先將筆記分類到資料夾中再進行摘要。');
+        });
+        
+        // Drag and drop listeners
+        folderHeader.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            folderHeader.classList.add('drag-hover');
+        });
+        
+        folderHeader.addEventListener('dragleave', () => {
+            folderHeader.classList.remove('drag-hover');
+        });
+        
+        folderHeader.addEventListener('drop', (e) => {
+            e.preventDefault();
+            folderHeader.classList.remove('drag-hover');
+            const dataStr = e.dataTransfer.getData('text/plain');
+            try {
+                const ids = JSON.parse(dataStr);
+                if (Array.isArray(ids)) {
+                    ids.forEach(id => {
+                        const notebook = notebooks.find(nb => nb.id === id);
+                        if (notebook) notebook.folderId = null;
+                    });
+                    saveNotebooksToStorage();
+                    renderNotebooksList();
+                    updateWorkspaceView();
+                }
+            } catch (err) {
+                console.error('Drop error', err);
+            }
+        });
+        
+        const innerList = folderEl.querySelector('.notebooks-list-inner');
         const sortedUncategorized = [...uncategorizedNotebooks].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         sortedUncategorized.forEach(notebook => {
             const li = createNotebookLI(notebook);
-            notebooksList.appendChild(li);
+            innerList.appendChild(li);
         });
+        
+        notebooksList.appendChild(folderEl);
     }
     
     // Ensure bulk move dropdown is updated
@@ -2015,6 +2098,10 @@ function startEditing(entryId, card, body, actionsDiv) {
 
 // Create new notebook
 function createNotebook(folderId = null) {
+    if (folderId && typeof folderId === 'object') {
+        folderId = currentFolderId ? currentFolderId : null;
+    }
+    
     const id = generateId();
     const count = notebooks.length + 1;
     
