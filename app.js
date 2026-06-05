@@ -213,8 +213,9 @@ function migrateSubjects() {
         localStorage.setItem(STORAGE_KEYS.NOTEBOOKS, JSON.stringify(notebooks));
     }
     
-    if (!currentSubjectId || !subjects.find(s => s.id === currentSubjectId)) {
-        currentSubjectId = subjects[0].id;
+    // Do not auto-select subject, keep the empty state as the Home screen
+    if (currentSubjectId && !subjects.find(s => s.id === currentSubjectId)) {
+        currentSubjectId = null;
     }
 }
 
@@ -3561,3 +3562,20 @@ document.addEventListener('touchend', e => {
         }
     }
 }, { passive: true });
+
+// --- Home Button Logic ---
+const logoBtn = document.querySelector('.logo-icon');
+if (logoBtn) {
+    logoBtn.style.cursor = 'pointer';
+    logoBtn.addEventListener('click', () => {
+        currentSubjectId = null;
+        currentNotebookId = null;
+        currentFolderId = null;
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_SUBJECT);
+        localStorage.removeItem(STORAGE_KEYS.CURRENT_NOTEBOOK);
+        renderSubjectsList();
+        renderNotebooksList();
+        updateWorkspaceView();
+        if (typeof closeMobileNav === 'function') closeMobileNav();
+    });
+}
