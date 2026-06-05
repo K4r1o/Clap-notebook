@@ -3564,7 +3564,7 @@ document.addEventListener('touchend', e => {
 }, { passive: true });
 
 // --- Home Button Logic ---
-const logoBtn = document.querySelector('.logo-icon');
+const logoBtn = document.getElementById('subject-logo');
 if (logoBtn) {
     logoBtn.style.cursor = 'pointer';
     logoBtn.addEventListener('click', () => {
