@@ -126,6 +126,23 @@
                         <button id="bulk-move-confirm-btn" class="btn-inline-confirm">確認</button>
                     </div>
                 </div>
+                
+                <!-- Folder AI Report Selection Toolbar -->
+                <div id="folder-ai-toolbar" class="inline-bulk-toolbar" style="display: none; background: linear-gradient(135deg, var(--sidebar-bg) 0%, rgba(140, 98, 57, 0.15) 100%); border: 1px solid var(--accent-color); box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 100;">
+                    <div class="inline-bulk-info" style="display: flex; align-items: center; gap: 8px;">
+                        <i class="fa-solid fa-wand-magic-sparkles" style="color: var(--accent-color); font-size: 1.2rem;"></i>
+                        <span>正在選取隨筆筆記本... 已選取 <strong id="folder-ai-selected-count" style="color: var(--accent-color); font-size: 1.15rem;">0</strong> 本</span>
+                    </div>
+                    <div class="inline-bulk-actions" style="display: flex; gap: 10px;">
+                        <button id="folder-ai-confirm-btn" class="btn btn-primary" style="background-color: var(--accent-color); border: none; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: #fff;">
+                            <i class="fa-solid fa-circle-check"></i> 確認整合
+                        </button>
+                        <button id="folder-ai-cancel-btn" class="btn" style="background-color: rgba(255, 255, 255, 0.05); border: 1px solid var(--report-border); padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--ink-color);">
+                            取消
+                        </button>
+                    </div>
+                </div>
+
                 <ul id="notebooks-list" class="notebooks-list">
                     <!-- Dynamic notebooks list here -->
                 </ul>

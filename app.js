@@ -58,6 +58,8 @@ let currentFolderId = null;
 let activeTrashTab = 'entries'; // 'entries' or 'notebooks'
 let currentNotebookId = null;
 let isBulkSelectMode = false;
+let isFolderAiSelectMode = false;
+let folderAiTargetFolderId = null;
 let selectedNotebookIds = new Set();
 // DOM Elements
 const apiKeyInput = document.getElementById('api-key-input');
@@ -834,7 +836,7 @@ function createNotebookLI(notebook) {
         // If clicking checkbox, do nothing special
         if (e.target.closest('.notebook-checkbox-wrapper')) return;
         
-        if (isBulkSelectMode) {
+        if (isBulkSelectMode || isFolderAiSelectMode) {
             // In bulk select mode, clicking the item toggles the checkbox
             const checkbox = li.querySelector('.notebook-item-checkbox');
             checkbox.checked = !checkbox.checked;
@@ -1041,6 +1043,10 @@ let bulkSelectTimeout2 = null;
 
 // Toggle Bulk Selection Mode
 function toggleBulkSelect(initialId = null) {
+    if (isFolderAiSelectMode) {
+        exitFolderAiSelectMode();
+    }
+
     if (!isBulkSelectMode && initialId) {
         isBulkSelectMode = true;
     } else {
@@ -1074,6 +1080,47 @@ function toggleBulkSelect(initialId = null) {
     renderNotebooksList();
 }
 
+function enterFolderAiSelectMode(folderId) {
+    isFolderAiSelectMode = true;
+    folderAiTargetFolderId = folderId;
+    isBulkSelectMode = false;
+    selectedNotebookIds.clear();
+    lastCheckedId = null;
+    
+    document.body.classList.add('body-bulk-select');
+    
+    const inlineBulkToolbar = document.getElementById('inline-bulk-toolbar');
+    if (inlineBulkToolbar) inlineBulkToolbar.style.display = 'none';
+    
+    const normalBtns = document.querySelectorAll('.normal-action-btn');
+    normalBtns.forEach(btn => btn.style.display = 'none');
+    
+    const folderAiToolbar = document.getElementById('folder-ai-toolbar');
+    if (folderAiToolbar) folderAiToolbar.style.display = 'flex';
+    
+    updateBulkActionsPanel();
+    renderNotebooksList();
+}
+
+function exitFolderAiSelectMode() {
+    isFolderAiSelectMode = false;
+    folderAiTargetFolderId = null;
+    
+    document.body.classList.remove('body-bulk-select');
+    
+    const folderAiToolbar = document.getElementById('folder-ai-toolbar');
+    if (folderAiToolbar) folderAiToolbar.style.display = 'none';
+    
+    const normalBtns = document.querySelectorAll('.normal-action-btn');
+    normalBtns.forEach(btn => btn.style.display = 'inline-flex');
+    
+    selectedNotebookIds.clear();
+    lastCheckedId = null;
+    
+    updateBulkActionsPanel();
+    renderNotebooksList();
+}
+
 // Update move folder select
 function updateMoveFolderSelect() {
     const select = document.getElementById('bulk-move-folder-select-floating');
@@ -1086,11 +1133,26 @@ function updateMoveFolderSelect() {
     });
 }
 
-// Update the Bulk Actions UI panel counts
 function updateBulkActionsPanel() {
     const countEl = document.getElementById('bulk-selected-count-floating');
     if (countEl) {
         countEl.textContent = selectedNotebookIds.size;
+    }
+    
+    // Update Folder AI selection count
+    const folderAiCountEl = document.getElementById('folder-ai-selected-count');
+    if (folderAiCountEl && folderAiTargetFolderId) {
+        const currentFolderNotebookIds = notebooks
+            .filter(n => {
+                if (folderAiTargetFolderId === 'uncategorized') {
+                    return n.subjectId === currentSubjectId && (!n.folderId || !folders.some(f => f.id === n.folderId));
+                } else {
+                    return n.folderId === folderAiTargetFolderId;
+                }
+            })
+            .map(n => n.id);
+        const selectedInFolderCount = Array.from(selectedNotebookIds).filter(id => currentFolderNotebookIds.includes(id)).length;
+        folderAiCountEl.textContent = selectedInFolderCount;
     }
     
     // Update select-all button text dynamically
@@ -2410,6 +2472,42 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    // Bind Folder AI Selection Toolbar buttons
+    const folderAiConfirmBtn = document.getElementById('folder-ai-confirm-btn');
+    const folderAiCancelBtn = document.getElementById('folder-ai-cancel-btn');
+    
+    if (folderAiConfirmBtn) {
+        folderAiConfirmBtn.addEventListener('click', () => {
+            const currentFolderNotebookIds = notebooks
+                .filter(n => {
+                    if (folderAiTargetFolderId === 'uncategorized') {
+                        return n.subjectId === currentSubjectId && (!n.folderId || !folders.some(f => f.id === n.folderId));
+                    } else {
+                        return n.folderId === folderAiTargetFolderId;
+                    }
+                })
+                .map(n => n.id);
+            const selectedInFolder = Array.from(selectedNotebookIds).filter(id => currentFolderNotebookIds.includes(id));
+            
+            if (selectedInFolder.length === 0) {
+                alert('請先在左側勾選要整合的隨筆筆記本！');
+                return;
+            }
+            
+            if (confirm('確定整合嗎？')) {
+                const targetFolderId = folderAiTargetFolderId;
+                exitFolderAiSelectMode();
+                generateFolderReport(targetFolderId, 'selected', selectedInFolder);
+            }
+        });
+    }
+    
+    if (folderAiCancelBtn) {
+        folderAiCancelBtn.addEventListener('click', () => {
+            exitFolderAiSelectMode();
+        });
+    }
 });
 
 // --- Event Listeners Registration ---
@@ -2700,18 +2798,22 @@ window.addEventListener('keydown', (e) => {
         return;
     }
     
-    if (isBulkSelectMode) {
+    if (isBulkSelectMode || isFolderAiSelectMode) {
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
             e.preventDefault();
             bulkSelectAll();
         }
-        if (e.key === 'Delete') {
+        if (e.key === 'Delete' && isBulkSelectMode) {
             e.preventDefault();
             bulkDelete();
         }
         if (e.key === 'Escape') {
             e.preventDefault();
-            toggleBulkSelect();
+            if (isFolderAiSelectMode) {
+                exitFolderAiSelectMode();
+            } else {
+                toggleBulkSelect();
+            }
         }
     }
     if (e.key === 'Escape') {
@@ -3138,7 +3240,7 @@ function promptFolderAiReportSource() {
 }
 
 // Generate AI Report for Folder
-async function generateFolderReport(folderId) {
+async function generateFolderReport(folderId, choiceOverride = null, targetNotebookIdsOverride = null) {
     const apiKey = localStorage.getItem(STORAGE_KEYS.API_KEY);
     if (!apiKey) {
         alert('未偵測到 API 金鑰，請先在「系統與 AI 設定」中輸入並儲存您的 Gemini API 金鑰！');
@@ -3165,18 +3267,28 @@ async function generateFolderReport(folderId) {
         return;
     }
     
-    // Prompt source options
-    const choice = await promptFolderAiReportSource();
-    if (choice === 'cancel') {
-        return;
-    }
+    let choice = choiceOverride;
+    let targetNotebooks = [];
     
-    let targetNotebooks = [...folderNotebooks];
-    if (choice === 'selected') {
-        targetNotebooks = folderNotebooks.filter(n => selectedNotebookIds.has(n.id));
-        if (targetNotebooks.length === 0) {
-            alert('您選擇了「勾選整合」，但此資料夾下沒有任何被勾選的隨筆筆記本！\n請先在側邊欄勾選要整合的筆記本，或選擇「整合全部」。');
+    if (choice === null) {
+        // Prompt source options
+        choice = await promptFolderAiReportSource();
+        if (choice === 'cancel') {
             return;
+        }
+        
+        if (choice === 'selected') {
+            // Enter Folder AI selection mode so user can choose notebooks in the sidebar
+            enterFolderAiSelectMode(folderId);
+            return;
+        }
+        
+        targetNotebooks = [...folderNotebooks];
+    } else {
+        if (choice === 'selected' && targetNotebookIdsOverride) {
+            targetNotebooks = folderNotebooks.filter(n => targetNotebookIdsOverride.includes(n.id));
+        } else {
+            targetNotebooks = [...folderNotebooks];
         }
     }
     
