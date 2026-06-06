@@ -1361,10 +1361,11 @@ async function executeBulkMerge() {
         };
         notebooks.push(newNotebook);
         
+        // Bug fix: keep a clean source map for AI, store prefixed content to entries for display
         const newEntries = allSelectedEntries.map(e => ({
             id: generateId(),
             notebook_id: mergedNotebookId,
-            content: `[來源：${e.source_title}] ${e.content}`,
+            content: `[來源：${e.source_title}] ${e.content}`,  // prefixed version stored for notebook display
             created_at: e.created_at
         }));
         entries.push(...newEntries);
@@ -1380,9 +1381,12 @@ async function executeBulkMerge() {
             return;
         }
         
-        const entriesText = newEntries
-            .map(e => `[記錄時間：${e.created_at}]\n${e.content}`)
-            .join('\n\n---\n\n');
+        // Build clean JSON input for AI — strip the display prefix, keep structured fields
+        const cleanEntriesForAI = allSelectedEntries.map(e => ({
+            time: e.created_at,
+            source: e.source_title || '未分類',
+            content: e.content  // original content, no prefix contamination
+        }));
             
         // Customize structure based on template selection
         let templateInstruction = '';
@@ -1437,20 +1441,26 @@ async function executeBulkMerge() {
             lengthInstruction = '請撰寫大於 1500 字的詳細報告，深入剖析每一條隨筆的細節與前後關聯，提供極為詳盡的報告內容。';
         }
 
-        const systemPrompt = `你是一位專業且貼心的隨身助理。以下是使用者將多個不同主題/項目的筆記本合併後，依時間排序的零星筆記隨筆列表。
+        const systemPrompt = `你是一位專業且貼心的隨身助理。以下是使用者將多個不同主題/項目的筆記本合併後，依時間排序的零星筆記隨筆列表（以 JSON 陣列格式提供，每筆包含 time、source、content 三個欄位）。
 請你幫忙將這些不同來源的筆記內容進行高層次的邏輯整合，理清條理，去蕪存菁，撰寫成一份排版精緻、具有全局視野且高度專業的「跨項目工作整合匯報」。
 
 請嚴格遵循以下匯報格式與風格要求：
 1. 請以「Markdown」格式進行輸出。
 2. ${templateInstruction}
 3. 語氣與風格：${toneInstruction}
-4. 報告長度控制：${lengthInstruction}`;
- 
+4. 報告長度控制：${lengthInstruction}
+5. 🛑 關聯性檢測與阻斷機制（極度重要）：在開始整合前，請先評估這些筆記之間的主題跨度。如果發現這些筆記橫跨完全不相干的領域（例如：同時包含「個人生活瑣事」與「專業工業測試」，或「日常購物」與「程式開發」），請【絕對不要】生硬地將它們寫成單一專案報告或強行進行對比分析。此時請完全無視上述的模板結構，改為輸出「分類彙整清單」，並在報告最開頭加上以下警語標題：
+
+   ⚠️ 筆記領域跨度過大，已為您切換為分區整理模式
+
+   然後依照各 source 筆記本名稱，為每個來源分別建立一個獨立章節，列點整理該來源的核心內容，不進行跨來源合併。若筆記主題大致相關，則照常執行上述模板。`;
+
         const userPrompt = `合併報告名稱：${mergedNotebookTitle}
 建立時間：${newNotebook.created_at}
+涵蓋筆記本數：${selectedList.length} 本，隨筆條數：${cleanEntriesForAI.length} 條
 
-【隨筆列表】：
-${entriesText}`;
+【隨筆列表資料（JSON 格式，欄位：time=記錄時間, source=來源筆記本, content=筆記內容）】：
+${JSON.stringify(cleanEntriesForAI, null, 2)}`;
 
         const selectedModel = localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-2.5-flash';
         const cleanModelName = selectedModel.replace('models/', '');
