@@ -2892,6 +2892,7 @@ function showDashboard(type, id) {
         finalizedEntriesCount = subEntries.filter(e => finalizedNotebooks.some(n => n.id === e.notebook_id)).length;
         
         document.getElementById('dashboard-meta').textContent = `包含 ${foldersCount} 個資料夾`;
+        document.getElementById('dashboard-meta').style.display = 'block';
         document.getElementById('stat-card-folders').style.display = 'flex';
         document.getElementById('stat-card-notes').style.display = 'none';
         
@@ -2925,11 +2926,11 @@ function showDashboard(type, id) {
         const activeNotebooks = folderNotebooks.filter(n => n.status !== 'finalized');
         const finalizedNotebooks = folderNotebooks.filter(n => n.status === 'finalized');
         
-        entriesCount = folderEntries.length;
-        activeEntriesCount = folderEntries.filter(e => activeNotebooks.some(n => n.id === e.notebook_id)).length;
-        finalizedEntriesCount = folderEntries.filter(e => finalizedNotebooks.some(n => n.id === e.notebook_id)).length;
+        entriesCount = folderNotebooks.length;
+        activeEntriesCount = activeNotebooks.length;
+        finalizedEntriesCount = finalizedNotebooks.length;
         
-        document.getElementById('dashboard-meta').textContent = `包含 ${notebooksCount} 本筆記`;
+        document.getElementById('dashboard-meta').style.display = 'none';
         document.getElementById('stat-card-folders').style.display = 'none';
         document.getElementById('stat-card-notes').style.display = 'flex';
         
