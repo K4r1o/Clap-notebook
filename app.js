@@ -1,4 +1,5 @@
-const GOOGLE_CLIENT_ID = '814649418958-tdgd3kklgtaklg3av9n3m6r974i7i6b1.apps.googleusercontent.com'; // 請在這裡填入你申請的 Google Client ID
+const DEFAULT_GOOGLE_CLIENT_ID = '814649418958-tdgd3kklgtaklg3av9n3m6r974i7i6b1.apps.googleusercontent.com'; // 預設 Client ID
+let googleClientId = localStorage.getItem(STORAGE_KEYS.GOOGLE_CLIENT_ID) || DEFAULT_GOOGLE_CLIENT_ID;
 
 // LocalStorage Key Constants
 const STORAGE_KEYS = {
@@ -15,6 +16,7 @@ const STORAGE_KEYS = {
     SYNC_PROVIDER: 'will_ai_sync_provider',
     GOOGLE_TOKEN: 'will_ai_google_token',
     GOOGLE_TOKEN_EXPIRY: 'will_ai_google_token_expiry',
+    GOOGLE_CLIENT_ID: 'will_ai_google_client_id',
     SUBJECTS: 'will_ai_subjects'
 };
 
@@ -93,6 +95,7 @@ let hasLoadedCloudThisSession = sessionStorage.getItem(SESSION_KEY) === 'true';
 
 // DOM Elements
 const apiKeyInput = document.getElementById('api-key-input');
+const googleClientIdInput = document.getElementById('google-client-id-input');
 const toggleApiKeyBtn = document.getElementById('toggle-api-key-btn');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const settingsStatus = document.getElementById('settings-status');
@@ -265,6 +268,9 @@ function loadSettingsFromStorage() {
     if (apiKeyInput) apiKeyInput.value = savedGeminiKey;
     if (supabaseUrlInput) supabaseUrlInput.value = savedSupabaseUrl;
     if (supabaseKeyInput) supabaseKeyInput.value = savedSupabaseKey;
+    
+    const savedGoogleClientId = localStorage.getItem(STORAGE_KEYS.GOOGLE_CLIENT_ID) || '';
+    if (googleClientIdInput) googleClientIdInput.value = savedGoogleClientId;
     
     if (savedGeminiKey) {
         if (apiWarningDot) apiWarningDot.style.display = 'none';
@@ -2492,9 +2498,9 @@ async function initializeGapiClient() {
 
 function gisLoaded() {
     if (gisInited) return;
-    if (!GOOGLE_CLIENT_ID) return;
+    if (!googleClientId) return;
     googleTokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: GOOGLE_CLIENT_ID,
+        client_id: googleClientId,
         scope: 'https://www.googleapis.com/auth/drive.appdata',
         callback: (tokenResponse) => {
             if (tokenResponse.error !== undefined) {
@@ -2891,6 +2897,22 @@ async function loadFromGoogleDrive() {
 // Unified Settings Save
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener('click', async () => {
+        if (googleClientIdInput) {
+            const newClientId = googleClientIdInput.value.trim();
+            const oldClientId = localStorage.getItem(STORAGE_KEYS.GOOGLE_CLIENT_ID) || '';
+            if (newClientId !== oldClientId) {
+                if (newClientId) {
+                    localStorage.setItem(STORAGE_KEYS.GOOGLE_CLIENT_ID, newClientId);
+                } else {
+                    localStorage.removeItem(STORAGE_KEYS.GOOGLE_CLIENT_ID);
+                }
+                googleClientId = newClientId || DEFAULT_GOOGLE_CLIENT_ID;
+                alert('Google Client ID 已儲存！網頁將自動重新整理以套用新設定。');
+                location.reload();
+                return;
+            }
+        }
+        
         const key = apiKeyInput.value.trim();
         
         if (key) {
@@ -2940,8 +2962,8 @@ const googleLoginBtn = document.getElementById('google-login-btn');
 const overlayGoogleLoginBtn = document.getElementById('overlay-google-login-btn');
 
 const handleGoogleLogin = () => {
-    if (!GOOGLE_CLIENT_ID) {
-        alert('請先在 app.js 頂端設定 GOOGLE_CLIENT_ID 才能使用 Google 登入功能！');
+    if (!googleClientId) {
+        alert('請先在設定中輸入您個人的 Google Client ID 才能使用 Google 登入功能！');
         return;
     }
     
