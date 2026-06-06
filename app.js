@@ -1,6 +1,3 @@
-const DEFAULT_GOOGLE_CLIENT_ID = '814649418958-tdgd3kklgtaklg3av9n3m6r974i7i6b1.apps.googleusercontent.com'; // 預設 Client ID
-let googleClientId = localStorage.getItem(STORAGE_KEYS.GOOGLE_CLIENT_ID) || DEFAULT_GOOGLE_CLIENT_ID;
-
 // LocalStorage Key Constants
 const STORAGE_KEYS = {
     NOTEBOOKS: 'will_ai_notebooks',
@@ -19,6 +16,9 @@ const STORAGE_KEYS = {
     GOOGLE_CLIENT_ID: 'will_ai_google_client_id',
     SUBJECTS: 'will_ai_subjects'
 };
+
+const DEFAULT_GOOGLE_CLIENT_ID = '814649418958-tdgd3kklgtaklg3av9n3m6r974i7i6b1.apps.googleusercontent.com'; // 預設 Client ID
+let googleClientId = localStorage.getItem(STORAGE_KEYS.GOOGLE_CLIENT_ID) || DEFAULT_GOOGLE_CLIENT_ID;
 
 // Migration from Warm Notebook legacy storage keys to Will.ai keys
 function migrateLegacyStorage() {
@@ -96,6 +96,8 @@ let hasLoadedCloudThisSession = sessionStorage.getItem(SESSION_KEY) === 'true';
 // DOM Elements
 const apiKeyInput = document.getElementById('api-key-input');
 const googleClientIdInput = document.getElementById('google-client-id-input');
+const supabaseUrlInput = document.getElementById('supabase-url-input');
+const supabaseKeyInput = document.getElementById('supabase-key-input');
 const toggleApiKeyBtn = document.getElementById('toggle-api-key-btn');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const settingsStatus = document.getElementById('settings-status');
@@ -2479,6 +2481,10 @@ function closeBulkRenameModal() {
 
 // --- Google Drive Sync Logic ---
 function gapiLoaded() {
+    if (typeof gapiLoadStarted === 'undefined') {
+        console.log('Google API script loaded before app.js, deferring initialization...');
+        return;
+    }
     if (gapiLoadStarted) return;
     gapiLoadStarted = true;
     gapi.load('client', initializeGapiClient);
@@ -2497,6 +2503,10 @@ async function initializeGapiClient() {
 }
 
 function gisLoaded() {
+    if (typeof gisInited === 'undefined') {
+        console.log('Google Identity Services loaded before app.js, deferring initialization...');
+        return;
+    }
     if (gisInited) return;
     if (!googleClientId) return;
     googleTokenClient = google.accounts.oauth2.initTokenClient({
