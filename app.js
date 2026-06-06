@@ -703,7 +703,7 @@ function renderNotebooksList() {
                 localStorage.setItem('uncategorized_collapsed', 'false');
                 folderHeader.querySelector('.folder-icon').classList.replace('fa-folder', 'fa-folder-open');
             }
-            selectFolderForDashboard(null); // Select uncategorized (represented as null in dashboard logic)
+            selectFolderForDashboard('uncategorized'); // Select uncategorized
         });
         
         // Add notebook
@@ -2899,15 +2899,24 @@ function showDashboard(type, id) {
         aiBtn.onclick = () => generateSubjectReport(id);
         
     } else if (type === 'folder') {
-        const folder = folders.find(f => f.id === id);
-        if (!folder) return;
+        let folderName = '未分類筆記';
+        let folderNotebooks = [];
+        const isUncategorized = (id === null || id === 'uncategorized');
         
-        title = `📂 ${folder.name}`;
-        report = folder.report;
+        if (isUncategorized) {
+            folderNotebooks = notebooks.filter(n => n.subjectId === currentSubjectId && (!n.folderId || !folders.some(f => f.id === n.folderId)));
+            title = `📂 未分類筆記`;
+            report = localStorage.getItem(`will_ai_uncategorized_report_${currentSubjectId}`) || null;
+        } else {
+            const folder = folders.find(f => f.id === id);
+            if (!folder) return;
+            folderName = folder.name;
+            folderNotebooks = notebooks.filter(n => n.folderId === id);
+            title = `📂 ${folderName}`;
+            report = folder.report;
+        }
         
         foldersCount = 1;
-        
-        const folderNotebooks = notebooks.filter(n => n.folderId === id);
         notebooksCount = folderNotebooks.length;
         
         const notebookIds = new Set(folderNotebooks.map(n => n.id));
@@ -2916,37 +2925,39 @@ function showDashboard(type, id) {
         const activeNotebooks = folderNotebooks.filter(n => n.status !== 'finalized');
         const finalizedNotebooks = folderNotebooks.filter(n => n.status === 'finalized');
         
-        entriesCount = notebooksCount;
-        activeEntriesCount = activeNotebooks.length;
-        finalizedEntriesCount = finalizedNotebooks.length;
+        entriesCount = folderEntries.length;
+        activeEntriesCount = folderEntries.filter(e => activeNotebooks.some(n => n.id === e.notebook_id)).length;
+        finalizedEntriesCount = folderEntries.filter(e => finalizedNotebooks.some(n => n.id === e.notebook_id)).length;
         
         document.getElementById('dashboard-meta').textContent = `包含 ${notebooksCount} 本筆記`;
         document.getElementById('stat-card-folders').style.display = 'none';
         document.getElementById('stat-card-notes').style.display = 'flex';
         
         // Show folder specific actions
-        if (renameBtn) {
-            renameBtn.style.display = 'flex';
-            renameBtn.onclick = () => {
-                const newName = prompt('請輸入新的資料夾名稱：', folder.name);
-                if (newName && newName.trim() !== '' && newName.trim() !== folder.name) {
-                    renameFolder(folder.id, newName.trim());
-                }
-            };
+        if (!isUncategorized) {
+            const folder = folders.find(f => f.id === id);
+            if (renameBtn && folder) {
+                renameBtn.style.display = 'flex';
+                renameBtn.onclick = () => {
+                    const newName = prompt('請輸入新的資料夾名稱：', folder.name);
+                    if (newName && newName.trim() !== '' && newName.trim() !== folder.name) {
+                        renameFolder(folder.id, newName.trim());
+                    }
+                };
+            }
+            if (deleteBtn && folder) {
+                deleteBtn.style.display = 'flex';
+                deleteBtn.onclick = () => {
+                    if (confirm(`確定要刪除資料夾「${folder.name}」嗎？（資料夾內的筆記本將會被移出至未分類）`)) {
+                        deleteFolder(folder.id);
+                    }
+                };
+            }
         }
         
         if (addNotebookBtn) {
             addNotebookBtn.style.display = 'flex';
-            addNotebookBtn.onclick = () => createNotebook(folder.id);
-        }
-        
-        if (deleteBtn) {
-            deleteBtn.style.display = 'flex';
-            deleteBtn.onclick = () => {
-                if (confirm(`確定要刪除資料夾「${folder.name}」嗎？（資料夾內的筆記本將會被移出至未分類）`)) {
-                    deleteFolder(folder.id);
-                }
-            };
+            addNotebookBtn.onclick = () => createNotebook(isUncategorized ? null : id);
         }
         
         const aiBtn = document.getElementById('dashboard-ai-btn');
@@ -3103,10 +3114,19 @@ async function generateFolderReport(folderId) {
         return;
     }
     
-    const folder = folders.find(f => f.id === folderId);
-    if (!folder) return;
+    let folderName = '未分類筆記';
+    let folderNotebooks = [];
+    const isUncategorized = (folderId === null || folderId === 'uncategorized');
     
-    const folderNotebooks = notebooks.filter(n => n.folderId === folderId);
+    if (isUncategorized) {
+        folderNotebooks = notebooks.filter(n => n.subjectId === currentSubjectId && (!n.folderId || !folders.some(f => f.id === n.folderId)));
+    } else {
+        const folder = folders.find(f => f.id === folderId);
+        if (!folder) return;
+        folderName = folder.name;
+        folderNotebooks = notebooks.filter(n => n.folderId === folderId);
+    }
+    
     if (folderNotebooks.length === 0) {
         alert('此資料夾下沒有任何筆記本！');
         return;
@@ -3132,13 +3152,13 @@ async function generateFolderReport(folderId) {
             }
         });
         
-        const systemPrompt = `你是一位專業且貼心的隨身智能助理。以下是使用者在資料夾「${folder.name}」中多個筆記本內的隨手筆記。
+        const systemPrompt = `你定義為專業且貼心的隨身智能助理。以下是使用者在資料夾「${folderName}」中多個筆記本內的隨手筆記。
 請你幫忙將這些筆記內容進行邏輯整合，理清條理，撰寫成一份精緻的資料夾整合報告。
 
 請嚴格遵循以下匯報格式要求：
 1. 請以「Markdown」格式進行輸出。
 2. 匯報結構必須包含：
-   - # 📂資料夾整合工作報告：${folder.name}
+   - # 📂資料夾整合工作報告：${folderName}
    - ## 📋 資料夾內容概述
      (簡短總結該資料夾下所有筆記本的統合內容)
    - ## 🔍 分類重點條列
@@ -3149,7 +3169,7 @@ async function generateFolderReport(folderId) {
      (以溫暖親切的助理語氣，分析使用者的工作步調，提醒注意休息與加油打氣)
 3. 報告內文請維持簡潔、專業與條理。`;
 
-        const userPrompt = `資料夾名稱：${folder.name}
+        const userPrompt = `資料夾名稱：${folderName}
 
 【整合隨筆列表】：
 ${notesText}`;
@@ -3181,10 +3201,18 @@ ${notesText}`;
             throw new Error('API 回傳的格式不正確或內容為空');
         }
         
-        folder.report = reportMarkdown;
-        folder.report_created_at = formatDateTime(new Date());
+        if (isUncategorized) {
+            localStorage.setItem(`will_ai_uncategorized_report_${currentSubjectId}`, reportMarkdown);
+            localStorage.setItem(`will_ai_uncategorized_report_created_at_${currentSubjectId}`, formatDateTime(new Date()));
+        } else {
+            const folder = folders.find(f => f.id === folderId);
+            if (folder) {
+                folder.report = reportMarkdown;
+                folder.report_created_at = formatDateTime(new Date());
+                saveFoldersToStorage();
+            }
+        }
         
-        saveFoldersToStorage();
         showDashboard('folder', folderId);
         alert('🎉 AI 資料夾整合摘要報告生成成功！');
         
