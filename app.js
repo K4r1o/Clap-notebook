@@ -3105,6 +3105,38 @@ ${notesText}`;
     }
 }
 
+// Helper to prompt user for Folder AI Report source options
+function promptFolderAiReportSource() {
+    return new Promise((resolve) => {
+        const modal = document.getElementById('folder-ai-modal');
+        const closeBtn = document.getElementById('close-folder-ai-modal-btn');
+        const optSelected = document.getElementById('folder-ai-opt-selected');
+        const optAll = document.getElementById('folder-ai-opt-all');
+        const optCancel = document.getElementById('folder-ai-opt-cancel');
+        
+        if (!modal) {
+            resolve('cancel');
+            return;
+        }
+        
+        modal.style.display = 'flex';
+        
+        const cleanup = (choice) => {
+            modal.style.display = 'none';
+            closeBtn.onclick = null;
+            optSelected.onclick = null;
+            optAll.onclick = null;
+            optCancel.onclick = null;
+            resolve(choice);
+        };
+        
+        closeBtn.onclick = () => cleanup('cancel');
+        optCancel.onclick = () => cleanup('cancel');
+        optSelected.onclick = () => cleanup('selected');
+        optAll.onclick = () => cleanup('all');
+    });
+}
+
 // Generate AI Report for Folder
 async function generateFolderReport(folderId) {
     const apiKey = localStorage.getItem(STORAGE_KEYS.API_KEY);
@@ -3133,10 +3165,25 @@ async function generateFolderReport(folderId) {
         return;
     }
     
-    const notebookIds = new Set(folderNotebooks.map(n => n.id));
+    // Prompt source options
+    const choice = await promptFolderAiReportSource();
+    if (choice === 'cancel') {
+        return;
+    }
+    
+    let targetNotebooks = [...folderNotebooks];
+    if (choice === 'selected') {
+        targetNotebooks = folderNotebooks.filter(n => selectedNotebookIds.has(n.id));
+        if (targetNotebooks.length === 0) {
+            alert('您選擇了「勾選整合」，但此資料夾下沒有任何被勾選的隨筆筆記本！\n請先在側邊欄勾選要整合的筆記本，或選擇「整合全部」。');
+            return;
+        }
+    }
+    
+    const notebookIds = new Set(targetNotebooks.map(n => n.id));
     const folderEntries = entries.filter(e => notebookIds.has(e.notebook_id));
     if (folderEntries.length === 0) {
-        alert('此資料夾下沒有任何隨筆筆記！請先新增一些筆記內容再進行整理。');
+        alert('選取的隨筆筆記本中沒有任何隨筆筆記！請先新增一些筆記內容再進行整理。');
         return;
     }
     
@@ -3144,7 +3191,7 @@ async function generateFolderReport(folderId) {
     
     try {
         let notesText = '';
-        folderNotebooks.forEach(nb => {
+        targetNotebooks.forEach(nb => {
             const nbEntries = folderEntries.filter(e => e.notebook_id === nb.id);
             if (nbEntries.length > 0) {
                 notesText += `### 筆記本：${nb.title}\n`;
@@ -3202,14 +3249,17 @@ ${notesText}`;
             throw new Error('API 回傳的格式不正確或內容為空');
         }
         
+        const sourceTitles = targetNotebooks.map(n => n.title);
         if (isUncategorized) {
             localStorage.setItem(`will_ai_uncategorized_report_${currentSubjectId}`, reportMarkdown);
             localStorage.setItem(`will_ai_uncategorized_report_created_at_${currentSubjectId}`, formatDateTime(new Date()));
+            localStorage.setItem(`will_ai_uncategorized_report_sources_${currentSubjectId}`, JSON.stringify(sourceTitles));
         } else {
             const folder = folders.find(f => f.id === folderId);
             if (folder) {
                 folder.report = reportMarkdown;
                 folder.report_created_at = formatDateTime(new Date());
+                folder.report_sources = sourceTitles;
                 saveFoldersToStorage();
             }
         }

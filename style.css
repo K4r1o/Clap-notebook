@@ -3206,3 +3206,48 @@ body[data-theme="kraft"] .stat-card {
     background-color: rgba(255, 107, 107, 0.1);
     color: #ff6b6b;
 }
+
+/* Folder AI Option Modal */
+.btn-folder-ai-option {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    border: 1px solid var(--report-border);
+    border-radius: 12px;
+    background: var(--input-bg);
+    color: var(--ink-color);
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.2s ease-in-out;
+    width: 100%;
+    box-sizing: border-box;
+}
+.btn-folder-ai-option:hover {
+    background: var(--sidebar-hover);
+    border-color: var(--accent-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+.btn-folder-ai-option i {
+    font-size: 1.5rem;
+    color: var(--accent-color);
+    flex-shrink: 0;
+}
+.folder-ai-cancel-btn {
+    width: 100%;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid var(--report-border);
+    background: var(--input-bg);
+    color: var(--ink-color);
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+}
+.folder-ai-cancel-btn:hover {
+    background: var(--sidebar-hover);
+}
+
