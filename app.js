@@ -1308,6 +1308,242 @@ function bulkMove() {
     showUndoToast('move', `已將 ${moves.length} 本筆記本移動至「${folderName}」。`);
 }
 
+// ─────────────────────────────────────────────────────────────
+//  Loading overlay phase indicator helper
+// ─────────────────────────────────────────────────────────────
+function setLoadingPhase(statusText, phaseLabel, progressPct) {
+    const statusEl = document.getElementById('loading-status-text');
+    const badgeEl  = document.getElementById('loading-phase-badge');
+    const fillEl   = document.getElementById('loading-progress-fill');
+    if (statusEl) statusEl.textContent = statusText;
+    if (badgeEl)  { badgeEl.textContent = phaseLabel; badgeEl.style.display = phaseLabel ? 'block' : 'none'; }
+    if (fillEl)   fillEl.style.width = progressPct + '%';
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Three-Phase AI Pipeline  (shared by Merge / Folder / Subject)
+//
+//  cleanEntries : [{ time, source, content }]
+//  context      : { title, tone?, length?, templateInstruction? }
+//  Returns      : final Markdown string
+// ─────────────────────────────────────────────────────────────
+async function runThreePhaseAI(cleanEntries, context, apiKey, modelUrl) {
+
+    /* ── PHASE 1 + 2 : Entity Extraction & Intent Routing ─── */
+    setLoadingPhase('🔍 第一階段：萃取筆記實體與分析意圖...', 'Phase 1 of 2 — Map & Intent Routing', 25);
+
+    const phase12Prompt = `你是一位資料分析師，任務是對使用者的多則隨手筆記進行結構化分析。
+你必須完成兩件事：
+
+【第一步 — 實體萃取 (Map)】
+對每一則筆記（由 source 欄位區分來源）獨立進行解析，從中提取以下維度的結構化資訊：
+- entities: 提取明確的人物、客戶、組織、地點、系統名稱
+- metrics: 提取任何可量化的數值、比例、日期範圍、時間點
+- issues: 識別筆記中明確或隱含的問題點、異常、風險、障礙
+- tasks: 識別明確提及或強烈隱含的待辦事項、行動項目
+- keywords: 3-6 個最能代表這則筆記主題的核心關鍵詞
+
+【第二步 — 意圖推論 (Intent Routing)】
+綜合所有筆記的實體萃取結果，推論這批筆記之間的關係模式，選擇最合適的報告模板：
+- "timeline"：時間軸推進 (例：同一專案的階段性進度記錄)
+- "debugging"：特定問題追蹤 (例：異常數值、客訴、技術除錯)
+- "decision"：多方資訊決策 (例：比較報價、評估方案、資料彙整)
+- "weekly"：週期性工作回顧 (例：每日/週記錄的多項事務)
+- "unrelated"：跨度過大，無實質關聯 (此時不應強制整合)
+
+同時識別：
+- correlations：不同筆記之間的具體關聯或因果線索（引用原文欄位名稱與內容片段）
+- info_gaps：資料中明顯缺漏的關鍵資訊（例如有測試結果卻沒有記錄環境參數）
+- conflict_detected：布林值，true 表示「unrelated」等級的衝突，false 表示可整合
+
+【輸出格式】
+你必須「只輸出一個合法的 JSON 物件」，不要包含任何 Markdown 程式碼區塊或額外說明文字。JSON 格式如下：
+{
+  "intent": "timeline|debugging|decision|weekly|unrelated",
+  "conflict_detected": false,
+  "executive_summary": "一句話總結這批筆記的核心結論（如 conflict_detected 為 true 則填 null）",
+  "per_note_entities": [
+    {
+      "source": "來源筆記本名稱",
+      "entities": [],
+      "metrics": [],
+      "issues": [],
+      "tasks": [],
+      "keywords": []
+    }
+  ],
+  "correlations": ["跨筆記關聯描述1", "跨筆記關聯描述2"],
+  "info_gaps": ["缺漏的關鍵資訊1", "缺漏的關鍵資訊2"]
+}`;
+
+    const phase12UserInput = `【筆記資料 (JSON 格式)】：
+${JSON.stringify(cleanEntries, null, 2)}`;
+
+    const phase12Resp = await fetch(modelUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: `${phase12Prompt}\n\n${phase12UserInput}` }] }],
+            generationConfig: { responseMimeType: 'application/json' }
+        })
+    });
+
+    const phase12Data = await phase12Resp.json();
+    if (!phase12Resp.ok) throw new Error(phase12Data.error?.message || 'Phase 1+2 API 呼叫失敗');
+
+    let analysisRaw = phase12Data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    // Strip markdown fences if model wraps despite mimeType hint
+    analysisRaw = analysisRaw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+
+    let analysis;
+    try {
+        analysis = JSON.parse(analysisRaw);
+    } catch (e) {
+        // Fallback: if JSON parse fails, treat as non-conflict single-pass
+        console.warn('Phase 1+2 JSON parse failed, falling back to single-pass:', e);
+        analysis = { intent: 'timeline', conflict_detected: false, correlations: [], info_gaps: [], per_note_entities: [] };
+    }
+
+    /* ── CONFLICT BLOCKER ─── */
+    if (analysis.conflict_detected === true || analysis.intent === 'unrelated') {
+        setLoadingPhase('⚠️ 偵測到跨域衝突，切換為分區整理模式...', '衝突阻斷 — 分區整理', 80);
+        const categoryReport = buildCategoryReport(cleanEntries, analysis, context.title);
+        return categoryReport;
+    }
+
+    /* ── PHASE 3 : Structured Report Generation ─── */
+    setLoadingPhase('✍️ 第二階段：依分析結果撰寫結構化報告...', 'Phase 2 of 2 — Structured Output', 60);
+
+    // Determine template based on intent auto-detection (override user choice if needed)
+    const intentTemplateMap = {
+        timeline:  'standard',
+        debugging: 'comparison',
+        decision:  'comparison',
+        weekly:    'weekly'
+    };
+    const autoTemplate = intentTemplateMap[analysis.intent] || 'standard';
+    const effectiveTemplate = context.templateInstruction ? context.templateInstruction : autoTemplate;
+
+    const toneGuide = context.tone === 'professional' ? '極為專業、商務且條理分明的語氣'
+                    : context.tone === 'concise'      ? '極簡、精確，直奔重點'
+                    :                                   '溫暖、親切且有支持感的語氣';
+
+    const lengthGuide = context.length === 'short' ? '300–500 字精簡版'
+                      : context.length === 'long'  ? '1500 字以上深度版'
+                      :                              '800–1200 字標準版';
+
+    const correlationBlock = analysis.correlations?.length
+        ? analysis.correlations.map(c => `- ${c}`).join('\n')
+        : '- 本次筆記為獨立事項，未發現明確跨筆記關聯。';
+
+    const gapsBlock = analysis.info_gaps?.length
+        ? analysis.info_gaps.map(g => `- ⚠️ ${g}`).join('\n')
+        : '- 未發現明顯的資訊缺漏。';
+
+    const entitiesSummary = (analysis.per_note_entities || []).map(n =>
+        `**[${n.source}]**\n` +
+        (n.tasks?.length    ? `  - 待辦：${n.tasks.join('、')}\n` : '') +
+        (n.issues?.length   ? `  - 問題：${n.issues.join('、')}\n` : '') +
+        (n.metrics?.length  ? `  - 數值：${n.metrics.join('、')}\n` : '') +
+        (n.entities?.length ? `  - 涉及：${n.entities.join('、')}\n` : '')
+    ).join('\n');
+
+    const templateInstructions = {
+        standard: `報告結構：
+# ${context.title} — 整合工作報告
+## 📌 核心結論 (Executive Summary)
+## 📋 進度概覽與分項成果
+## 🔗 跨筆記關聯分析（使用下方提供的 correlations 資料）
+## 🚀 明確待辦清單（每項標注來源筆記與原文依據）
+## ❓ 情報斷層提醒（使用下方提供的 info_gaps 資料）`,
+        comparison: `報告結構：
+# ${context.title} — 跨項目深度分析
+## 📌 核心結論 (Executive Summary)
+## 🔍 各來源現況對比（建議以 Markdown 表格呈現：來源、現況、問題點、進度）
+## 🔗 跨筆記關聯與因果分析（使用下方 correlations）
+## 🚀 決策建議與行動清單
+## ❓ 情報斷層提醒（使用下方 info_gaps）`,
+        weekly: `報告結構：
+# ${context.title} — 工作週報
+## 📌 核心結論 (Executive Summary)
+## 📰 本期三大亮點（從實體分析中提煉最重要的 3 項成果）
+## 📌 各項目進度快照
+## 🗓️ 下階段重點
+## ❓ 情報斷層提醒（使用下方 info_gaps）`
+    };
+
+    const phase3SystemPrompt = `你是一位專業的報告撰寫助理。你的任務是根據已完成的結構化分析資料，撰寫一份高品質的工作整合報告。
+
+以下是分析資料（JSON 格式），這是由前一個分析階段產生的客觀事實，你必須以此為基礎：
+- executive_summary: 核心結論一句話（必須出現在報告開頭）
+- per_note_entities: 各筆記本的萃取實體（你的每個論點都必須從這裡找到依據）
+- correlations: 已識別的跨筆記關聯（必須完整呈現在「跨筆記關聯分析」章節）
+- info_gaps: 已識別的資訊缺漏（必須完整呈現在「情報斷層提醒」章節，不可省略）
+
+## 撰寫原則（必須嚴格遵守）
+
+1. **必須引用原文**：每個論點都要引用 per_note_entities 中的具體資料（用引號「」標示）
+2. **禁止憑空補充**：不得加入任何 per_note_entities 中不存在的資訊或假設
+3. **情報斷層章節必須出現**：即使 info_gaps 只有一項，也必須完整列出
+4. **使用表格**：在對比型報告中，優先使用 Markdown 表格呈現多來源資料
+5. **語氣**：${toneGuide}
+6. **長度**：${lengthGuide}
+
+${templateInstructions[effectiveTemplate] || templateInstructions.standard}`;
+
+    const phase3UserPrompt = `【結構化分析資料 (JSON)】：
+${JSON.stringify(analysis, null, 2)}
+
+【原始筆記資料供核對 (JSON)】：
+${JSON.stringify(cleanEntries, null, 2)}`;
+
+    const phase3Resp = await fetch(modelUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: `${phase3SystemPrompt}\n\n${phase3UserPrompt}` }] }]
+        })
+    });
+
+    const phase3Data = await phase3Resp.json();
+    if (!phase3Resp.ok) throw new Error(phase3Data.error?.message || 'Phase 3 API 呼叫失敗');
+
+    const reportMarkdown = phase3Data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!reportMarkdown) throw new Error('Phase 3 回傳的報告內容為空');
+
+    setLoadingPhase('✅ 報告生成完畢！', '', 100);
+    return reportMarkdown;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Conflict Mode: categorized report builder (no AI call needed)
+// ─────────────────────────────────────────────────────────────
+function buildCategoryReport(cleanEntries, analysis, title) {
+    const sourceMap = {};
+    cleanEntries.forEach(e => {
+        if (!sourceMap[e.source]) sourceMap[e.source] = [];
+        sourceMap[e.source].push(e);
+    });
+
+    let md = `# ⚠️ 筆記領域跨度過大，已為您切換為分區整理模式\n\n`;
+    md += `> **${title}**｜系統偵測到所選筆記涵蓋多個不相關領域，已自動切換為分區整理，不進行強制合併。\n\n---\n\n`;
+
+    Object.entries(sourceMap).forEach(([source, items]) => {
+        md += `## 📁 ${source}\n\n`;
+        items.forEach(e => {
+            md += `- **[${e.time}]** ${e.content}\n`;
+        });
+        md += '\n';
+    });
+
+    if (analysis.info_gaps?.length) {
+        md += `---\n\n## ❓ 情報斷層提醒\n\n`;
+        analysis.info_gaps.forEach(g => { md += `- ⚠️ ${g}\n`; });
+    }
+
+    return md;
+}
+
 // Bulk Merge selected notebooks and open options modal
 function bulkMergeReports() {
     if (selectedNotebookIds.size === 0) {
@@ -1329,6 +1565,7 @@ async function executeBulkMerge() {
     const selectedLength = document.getElementById('merge-length-select').value;
     
     loadingOverlay.style.display = 'flex';
+    setLoadingPhase('準備中...', '', 5);
     
     try {
         const allSelectedEntries = [];
@@ -1381,131 +1618,56 @@ async function executeBulkMerge() {
             return;
         }
         
-        // Build clean JSON input for AI — strip the display prefix, keep structured fields
+        // Clean structured JSON for AI — no display prefix contamination
         const cleanEntriesForAI = allSelectedEntries.map(e => ({
             time: e.created_at,
             source: e.source_title || '未分類',
-            content: e.content  // original content, no prefix contamination
+            content: e.content
         }));
-            
-        // Customize structure based on template selection
-        let templateInstruction = '';
-        if (selectedTemplate === 'standard') {
-            templateInstruction = `匯報結構必須包含：
-   - # ${mergedNotebookTitle} - 跨項目整合工作報告
-   - ## 📋 工作概述 (對本次合併的各筆記項目進度進行高層次綜合概述)
-   - ## 🔍 各項目進度與成果 (理清不同來源筆記的進度狀況，列點整理核心成果)
-   - ## 🚀 跨項目後續追蹤與待辦事項 (提煉出具體的行動代辦 Action Items)
-   - ## 💡 助理溫馨提醒 (提供支持性的助理反饋、注意工作節奏)`;
-        } else if (selectedTemplate === 'kanban') {
-            templateInstruction = `匯報結構必須包含：
-   - # ${mergedNotebookTitle} - 任務看板待辦清單
-   - ## 📊 看板概述 (摘要各筆記主要目標)
-   - ## 🔴 立即執行 (Immediate Action) - 緊急且重要的待辦項目
-   - ## 🟡 持續追蹤 (Ongoing Task) - 常規進行中、需後續追蹤項目
-   - ## 🟢 待啟動/規劃中 (Backlog) - 未來規劃項目
-   - ## 💡 助理效率建議 (提供改進效率與任務劃分策略)`;
-        } else if (selectedTemplate === 'comparison') {
-            templateInstruction = `匯報結構必須包含：
-   - # ${mergedNotebookTitle} - 跨項目對比分析
-   - ## 🔍 多項目狀態概覽 (羅列各被合併項目的目前狀態)
-   - ## 🤝 重合與關聯性分析 (分析各項目之間是否有相互重疊、依賴或衝突之處)
-   - ## ⚖️ 進度對比與差異分析 (以表格或清晰列表形式對比各項目進展快慢、成果差異)
-   - ## 🚀 資源分配與協同建議 (給出下一步的協同推進策略)`;
-        } else if (selectedTemplate === 'weekly') {
-            templateInstruction = `匯報結構必須包含：
-   - # ${mergedNotebookTitle} - 極簡工作週報
-   - ## 📰 核心亮點 (本次合併隨筆中最重要的 3 大成果)
-   - ## 📌 重點摘要 (各別項目的核心進展，精簡列點)
-   - ## 🗓️ 下週重點規劃 (下一步最核心的工作目標)
-   - ## 💡 助理小叮嚀 (工作與節奏調節提醒)`;
-        }
 
-        // Customize tone
-        let toneInstruction = '';
-        if (selectedTone === 'professional') {
-            toneInstruction = '使用極為專業、商務且條理分明的語氣，專注於邏輯架構與事實陳述。';
-        } else if (selectedTone === 'friendly') {
-            toneInstruction = '使用溫慢、親切且貼心的語氣。在匯報中多給予使用者鼓勵，像一位貼身的祕書或教練，字裡行間保持熱情。';
-        } else if (selectedTone === 'concise') {
-            toneInstruction = '使用極簡、精確且不帶任何修飾詞的語氣。直奔重點，去除任何客套與冗長字句。';
-        }
-
-        // Customize length
-        let lengthInstruction = '';
-        if (selectedLength === 'short') {
-            lengthInstruction = '請控制輸出字數在大約 300 至 500 字之間，精簡摘要，不要贅述。';
-        } else if (selectedLength === 'medium') {
-            lengthInstruction = '請控制輸出字數在大約 800 至 1200 字之間，結構清晰，內容詳實。';
-        } else if (selectedLength === 'long') {
-            lengthInstruction = '請撰寫大於 1500 字的詳細報告，深入剖析每一條隨筆的細節與前後關聯，提供極為詳盡的報告內容。';
-        }
-
-        const systemPrompt = `你是一位專業且貼心的隨身助理。以下是使用者將多個不同主題/項目的筆記本合併後，依時間排序的零星筆記隨筆列表（以 JSON 陣列格式提供，每筆包含 time、source、content 三個欄位）。
-請你幫忙將這些不同來源的筆記內容進行高層次的邏輯整合，理清條理，去蕪存菁，撰寫成一份排版精緻、具有全局視野且高度專業的「跨項目工作整合匯報」。
-
-請嚴格遵循以下匯報格式與風格要求：
-1. 請以「Markdown」格式進行輸出。
-2. ${templateInstruction}
-3. 語氣與風格：${toneInstruction}
-4. 報告長度控制：${lengthInstruction}
-5. 🛑 關聯性檢測與阻斷機制（極度重要）：在開始整合前，請先評估這些筆記之間的主題跨度。如果發現這些筆記橫跨完全不相干的領域（例如：同時包含「個人生活瑣事」與「專業工業測試」，或「日常購物」與「程式開發」），請【絕對不要】生硬地將它們寫成單一專案報告或強行進行對比分析。此時請完全無視上述的模板結構，改為輸出「分類彙整清單」，並在報告最開頭加上以下警語標題：
-
-   ⚠️ 筆記領域跨度過大，已為您切換為分區整理模式
-
-   然後依照各 source 筆記本名稱，為每個來源分別建立一個獨立章節，列點整理該來源的核心內容，不進行跨來源合併。若筆記主題大致相關，則照常執行上述模板。`;
-
-        const userPrompt = `合併報告名稱：${mergedNotebookTitle}
-建立時間：${newNotebook.created_at}
-涵蓋筆記本數：${selectedList.length} 本，隨筆條數：${cleanEntriesForAI.length} 條
-
-【隨筆列表資料（JSON 格式，欄位：time=記錄時間, source=來源筆記本, content=筆記內容）】：
-${JSON.stringify(cleanEntriesForAI, null, 2)}`;
+        // Build template instruction string for Phase 3
+        const templateInstructionMap = {
+            standard:   'standard',
+            kanban:     'standard',
+            comparison: 'comparison',
+            weekly:     'weekly'
+        };
 
         const selectedModel = localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-2.5-flash';
-        const cleanModelName = selectedModel.replace('models/', '');
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModelName}:generateContent?key=${apiKey}`;
-        
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
+        const cleanModelName = (MODEL_REGISTRY[selectedModel]?.id || selectedModel).replace('models/', '');
+        const modelUrl = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModelName}:generateContent?key=${apiKey}`;
+
+        const reportMarkdown = await runThreePhaseAI(
+            cleanEntriesForAI,
+            {
+                title:               mergedNotebookTitle,
+                tone:                selectedTone,
+                length:              selectedLength,
+                templateInstruction: templateInstructionMap[selectedTemplate] || 'standard'
             },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{
-                        text: `${systemPrompt}\n\n${userPrompt}`
-                    }]
-                }]
-            })
-        });
-        
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.error?.message || '合併 API 呼叫失敗');
-        }
-        
-        const reportMarkdown = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!reportMarkdown) {
-            throw new Error('回傳的合併匯報內容為空');
-        }
+            apiKey,
+            modelUrl
+        );
         
         newNotebook.report = reportMarkdown;
         
         saveNotebooksToStorage();
         saveEntriesToStorage();
         
-        toggleBulkSelect(); // Deactivate select mode
-        selectNotebook(mergedNotebookId); // Load the new merged report
+        toggleBulkSelect();
+        selectNotebook(mergedNotebookId);
         alert('🎉 批量合併工作報告成功！已為您自動載入合併筆記本。');
         
     } catch (error) {
         console.error('Bulk merge error:', error);
         alert(`合併失敗：\n${error.message}`);
     } finally {
+        setLoadingPhase('整理條理、邏輯重組，撰寫專業工作匯報中，請稍候片刻...', '', 0);
         loadingOverlay.style.display = 'none';
     }
 }
+
+
 
 // Bulk Clone (複製所選)
 function bulkClone() {
@@ -3150,81 +3312,29 @@ async function generateSubjectReport(subjectId) {
     }
     
     loadingOverlay.style.display = 'flex';
+    setLoadingPhase('準備中...', '', 5);
     
     try {
-        let notesText = '';
+        // Build clean JSON entries for three-phase pipeline
+        const cleanEntriesForAI = [];
         subNotebooks.forEach(nb => {
             const nbEntries = subEntries.filter(e => e.notebook_id === nb.id);
-            if (nbEntries.length > 0) {
-                notesText += `### 筆記本：${nb.title}\n`;
-                notesText += nbEntries.map(e => `[時間：${e.created_at}] ${e.content}`).join('\n');
-                notesText += '\n\n';
-            }
+            nbEntries.forEach(e => {
+                cleanEntriesForAI.push({ time: e.created_at, source: nb.title, content: e.content });
+            });
         });
-        
-        const systemPrompt = `你是一位專業且貼心的隨身智能助理。以下是使用者在主題分類「${subject.name}」中，跨多個筆記本的隨手筆記，每本筆記本的內容已分別列出。
-請你將這些筆記進行**全局深度整合分析**，撰寫成一份**有血有肉、內容紮實**的主題整合工作報告。
-
-## 核心原則（必須嚴格遵守）
-
-1. **時間軸進展分析**：依照記錄時間，描述本主題在不同時間點的演進過程。若同一任務或概念在不同筆記本/時間點被多次提及，請明確追蹤其進展（例如「此任務最早出現於 [筆記本A] 的 [時間]，於 [筆記本B] 的 [時間] 更新為...」）。
-2. **必須引用原文**：在每個重點段落中，必須直接引用使用者筆記中的具體字句、任務名稱、數字或關鍵詞（用引號「」標示），並標明來源筆記本。絕不使用筆記中未出現的詞彙進行臆測。
-3. **跨本關聯識別**：主動找出不同筆記本之間的連結——哪些任務互相依賴？哪些資訊在不同筆記本中有重複或矛盾？請用具體筆記本名稱說明關聯。
-4. **真實待辦萃取**：「行動建議」清單只能列出筆記中**明確提及或強烈隱含**的待辦事項，每項必須附上來源（筆記本名稱 + 時間）。禁止憑空生成與筆記無關的計畫。
-5. **宏觀觀察有據可查**：「全局觀察」必須基於具體可見的模式，例如：哪類任務被反覆記錄、是否有明顯的未完成項目積累、各筆記本在時間分佈上有何規律。
-6. **禁止空洞開場**：每個章節第一句必須是具體陳述，不得使用「本主題涵蓋了使用者的多個筆記本...」等無資訊量的開場白。
-
-## 輸出格式
-
-請以「Markdown」格式輸出，結構如下：
-
-- # 🏷️ 主題整合報告：${subject.name}
-- ## 📋 全局核心概覽
-  （3-5 句話精準總結，必須點名最重要的任務/事項，並追蹤跨時間點的進展節奏）
-- ## 🔍 各筆記本核心內容整合
-  （依筆記本分組，每組：**[筆記本名稱]** + 引用原文的關鍵進度，標注時間節點與狀態）
-- ## 🔗 跨筆記本脈絡與關聯分析
-  （找出不同筆記本之間的任務連結、依賴關係或資訊演進；若只有一本則省略此章節）
-- ## 🚀 明確待辦清單
-  （僅列有依據的待辦項目，格式：[ ] 任務 — 依據：「原文引用」 來源：[筆記本名稱 / 時間]）
-- ## 💡 全局工作模式觀察
-  （基於筆記特徵的有據觀察：哪類任務積累較多未完成？工作節奏有何規律？如無明顯觀察則省略）
-
-報告語氣專業且親切。`;
-
-        const userPrompt = `主題分類：${subject.name}
-建立時間：${subject.created_at}
-涵蓋筆記本數：${subNotebooks.length} 本
-
-【各筆記本隨筆列表（依筆記本分組）】：
-${notesText}`;
 
         const selectedValue = localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-2.5-flash';
         const modelInfo = MODEL_REGISTRY[selectedValue] || { id: selectedValue };
         const cleanModelName = modelInfo.id.replace('models/', '');
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModelName}:generateContent?key=${apiKey}`;
-        
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{
-                        text: `${systemPrompt}\n\n${userPrompt}`
-                    }]
-                }]
-            })
-        });
-        
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.error?.message || '呼叫 API 時發生未知錯誤');
-        }
-        
-        const reportMarkdown = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!reportMarkdown) {
-            throw new Error('API 回傳的格式不正確或內容為空');
-        }
+        const modelUrl = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModelName}:generateContent?key=${apiKey}`;
+
+        const reportMarkdown = await runThreePhaseAI(
+            cleanEntriesForAI,
+            { title: `🏷️ 主題整合報告：${subject.name}`, tone: 'professional', length: 'medium' },
+            apiKey,
+            modelUrl
+        );
         
         subject.report = reportMarkdown;
         subject.report_created_at = formatDateTime(new Date());
@@ -3237,6 +3347,7 @@ ${notesText}`;
         console.error('Gemini API Error:', error);
         alert(`主題整合報告生成失敗：\n${error.message}`);
     } finally {
+        setLoadingPhase('整理條理、邏輯重組，撰寫專業工作匯報中，請稍候片刻...', '', 0);
         loadingOverlay.style.display = 'none';
     }
 }
@@ -3334,80 +3445,29 @@ async function generateFolderReport(folderId, choiceOverride = null, targetNoteb
     }
     
     loadingOverlay.style.display = 'flex';
+    setLoadingPhase('準備中...', '', 5);
     
     try {
-        let notesText = '';
+        // Build clean JSON entries for three-phase pipeline
+        const cleanEntriesForAI = [];
         targetNotebooks.forEach(nb => {
             const nbEntries = folderEntries.filter(e => e.notebook_id === nb.id);
-            if (nbEntries.length > 0) {
-                notesText += `### 筆記本：${nb.title}\n`;
-                notesText += nbEntries.map(e => `[時間：${e.created_at}] ${e.content}`).join('\n');
-                notesText += '\n\n';
-            }
+            nbEntries.forEach(e => {
+                cleanEntriesForAI.push({ time: e.created_at, source: nb.title, content: e.content });
+            });
         });
-        
-        const systemPrompt = `你是一位專業且貼心的隨身智能助理。以下是使用者在資料夾「${folderName}」中多個筆記本內的隨手筆記，每本筆記本的內容已分別列出。
-請你將這些筆記內容進行**深度整合分析**，撰寫成一份**有血有肉、內容紮實**的資料夾整合報告。
-
-## 核心原則（必須嚴格遵守）
-
-1. **逐本摘要、橫向整合**：先對每個筆記本的內容進行獨立理解，再從中抽取共同主題、關聯任務與整體脈絡進行整合。
-2. **必須引用原文**：在「重點條列」中，每個論點都必須直接引用筆記中的具體字句（用引號「」標示），並標明來源筆記本名稱。禁止使用筆記中從未出現的詞彙或臆測的情節。
-3. **識別真實待辦**：「行動待辦」清單只能列出筆記中**明確提及或強烈隱含**的任務。每個待辦項目必須附上出處（來自哪個筆記本、哪個時間點的記錄）。
-4. **跨本對比分析**（如有多個筆記本）：如多個筆記本之間有關聯或重疊的任務，請明確指出「A 筆記本提到的 X 任務與 B 筆記本的 Y 事項存在關聯」，進行有據可查的橫向比較。
-5. **助理反饋有依據**：「助理反饋」必須基於可觀察到的筆記特徵（如：某類任務被反覆提及、記錄時間集中在特定時段、某個項目跨越多個筆記本），不得使用無根據的套話。
-6. **禁止空洞開場**：每個章節的第一句必須是具體陳述，不得以「本資料夾記錄了使用者的...」等廢話開場。
-
-## 輸出格式
-
-請以「Markdown」格式輸出，結構如下：
-
-- # 📂 資料夾整合報告：${folderName}
-- ## 📋 整合概覽
-  （3-5 句話精準總結，必須點名資料夾中最重要的任務/主題，附上涉及的筆記本名稱）
-- ## 🔍 各筆記本核心內容與重點摘要
-  （依筆記本分組，每組：**[筆記本名稱]** + 引用原文的重點列表，標注具體時間與狀態）
-- ## 🔗 跨筆記本關聯分析
-  （若有多個筆記本，分析共同主題、互相關聯或衝突的任務；若只有一個筆記本則省略此章節）
-- ## 🚀 明確待辦清單
-  （僅列有依據的待辦項目，格式：[ ] 任務 — 依據：「原文引用」 來源：[筆記本名稱]）
-- ## 💡 助理具體觀察
-  （基於筆記特徵的有據反饋；若無明顯觀察則省略此章節）
-
-報告語氣專業且親切。`;
-
-        const userPrompt = `資料夾名稱：${folderName}
-涵蓋筆記本數：${targetNotebooks.length} 本
-
-【各筆記本隨筆列表】：
-${notesText}`;
 
         const selectedValue = localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-2.5-flash';
         const modelInfo = MODEL_REGISTRY[selectedValue] || { id: selectedValue };
         const cleanModelName = modelInfo.id.replace('models/', '');
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModelName}:generateContent?key=${apiKey}`;
-        
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{
-                        text: `${systemPrompt}\n\n${userPrompt}`
-                    }]
-                }]
-            })
-        });
-        
-        const data = await response.json();
-        if (!response.ok) {
-            throw new Error(data.error?.message || '呼叫 API 時發生未知錯誤');
-        }
-        
-        const reportMarkdown = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!reportMarkdown) {
-            throw new Error('API 回傳的格式不正確或內容為空');
-        }
+        const modelUrl = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModelName}:generateContent?key=${apiKey}`;
+
+        const reportMarkdown = await runThreePhaseAI(
+            cleanEntriesForAI,
+            { title: `📂 資料夾整合報告：${folderName}`, tone: 'professional', length: 'medium' },
+            apiKey,
+            modelUrl
+        );
         
         const sourceTitles = targetNotebooks.map(n => n.title);
         if (isUncategorized) {
@@ -3431,6 +3491,7 @@ ${notesText}`;
         console.error('Gemini API Error:', error);
         alert(`資料夾整合報告生成失敗：\n${error.message}`);
     } finally {
+        setLoadingPhase('整理條理、邏輯重組，撰寫專業工作匯報中，請稍候片刻...', '', 0);
         loadingOverlay.style.display = 'none';
     }
 }
