@@ -8,17 +8,8 @@ const STORAGE_KEYS = {
     TRASH_ENTRIES: 'will_ai_trash_entries',
     THEME: 'will_ai_theme',
     FOLDERS: 'will_ai_folders',
-    SUPABASE_URL: 'will_ai_supabase_url',
-    SUPABASE_KEY: 'will_ai_supabase_key',
-    SYNC_PROVIDER: 'will_ai_sync_provider',
-    GOOGLE_TOKEN: 'will_ai_google_token',
-    GOOGLE_TOKEN_EXPIRY: 'will_ai_google_token_expiry',
-    GOOGLE_CLIENT_ID: 'will_ai_google_client_id',
     SUBJECTS: 'will_ai_subjects'
 };
-
-const DEFAULT_GOOGLE_CLIENT_ID = '814649418958-tdgd3kklgtaklg3av9n3m6r974i7i6b1.apps.googleusercontent.com'; // 預設 Client ID
-let googleClientId = localStorage.getItem(STORAGE_KEYS.GOOGLE_CLIENT_ID) || DEFAULT_GOOGLE_CLIENT_ID;
 
 // Migration from Warm Notebook legacy storage keys to Will.ai keys
 function migrateLegacyStorage() {
@@ -30,11 +21,7 @@ function migrateLegacyStorage() {
         TRASH_NOTEBOOKS: 'warm_notebook_trash_notebooks',
         TRASH_ENTRIES: 'warm_notebook_trash_entries',
         THEME: 'warm_notebook_theme',
-        FOLDERS: 'warm_notebook_folders',
-        SUPABASE_URL: 'warm_notebook_supabase_url',
-        SUPABASE_KEY: 'warm_notebook_supabase_key',
-        SYNC_PROVIDER: 'warm_notebook_sync_provider',
-        GOOGLE_TOKEN: 'warm_notebook_google_token'
+        FOLDERS: 'warm_notebook_folders'
     };
 
     const newKeys = {
@@ -45,11 +32,7 @@ function migrateLegacyStorage() {
         TRASH_NOTEBOOKS: 'will_ai_trash_notebooks',
         TRASH_ENTRIES: 'will_ai_trash_entries',
         THEME: 'will_ai_theme',
-        FOLDERS: 'will_ai_folders',
-        SUPABASE_URL: 'will_ai_supabase_url',
-        SUPABASE_KEY: 'will_ai_supabase_key',
-        SYNC_PROVIDER: 'will_ai_sync_provider',
-        GOOGLE_TOKEN: 'will_ai_google_token'
+        FOLDERS: 'will_ai_folders'
     };
 
     Object.keys(legacyKeys).forEach(key => {
@@ -76,32 +59,11 @@ let activeTrashTab = 'entries'; // 'entries' or 'notebooks'
 let currentNotebookId = null;
 let isBulkSelectMode = false;
 let selectedNotebookIds = new Set();
-let supabaseClient = null;
-
-// Sync State
-const syncProvider = 'google';
-let googleTokenClient = null;
-let googleAccessToken = localStorage.getItem(STORAGE_KEYS.GOOGLE_TOKEN) || null;
-let gapiLoadStarted = false;
-let gapiInited = false;
-let gisInited = false;
-let isSyncingToGoogle = false;
-let tokenExpiryTime = localStorage.getItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY) ? parseInt(localStorage.getItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY)) : null; // Track when current token expires
-let pendingSyncAfterRefresh = false; // Retry sync after token refresh
-// Track if we already loaded cloud data in this session
-// This prevents overwriting newer local data on page reload
-const SESSION_KEY = 'will_ai_session_loaded';
-let hasLoadedCloudThisSession = sessionStorage.getItem(SESSION_KEY) === 'true';
-
 // DOM Elements
 const apiKeyInput = document.getElementById('api-key-input');
-const googleClientIdInput = document.getElementById('google-client-id-input');
-const supabaseUrlInput = document.getElementById('supabase-url-input');
-const supabaseKeyInput = document.getElementById('supabase-key-input');
 const toggleApiKeyBtn = document.getElementById('toggle-api-key-btn');
 const saveSettingsBtn = document.getElementById('save-settings-btn');
 const settingsStatus = document.getElementById('settings-status');
-const syncStatusBadge = document.getElementById('sync-status-badge');
 const apiWarningDot = document.getElementById('api-warning-dot');
 const createNotebookBtn = document.getElementById('create-notebook-btn');
 const notebooksList = document.getElementById('notebooks-list');
@@ -157,30 +119,10 @@ function generateId() {
 
 function saveFoldersToStorage() {
     localStorage.setItem(STORAGE_KEYS.FOLDERS, JSON.stringify(folders));
-    if (syncProvider === 'supabase' && supabaseClient) {
-        (async () => {
-            try {
-                const activeIds = folders.map(f => f.id);
-                if (activeIds.length > 0) {
-                    await supabaseClient.from('folders').delete().not('id', 'in', activeIds);
-                    await supabaseClient.from('folders').upsert(folders);
-                } else {
-                    await supabaseClient.from('folders').delete().neq('id', 'placeholder');
-                }
-            } catch (err) {
-                console.error("Folder sync failed:", err);
-            }
-        })();
-    } else if (syncProvider === 'google') {
-        syncToGoogleDrive();
-    }
 }
 
 function saveSubjectsToStorage() {
     localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
-    if (syncProvider === 'google') {
-        syncToGoogleDrive();
-    }
 }
 
 // Migrate legacy data structures to support subjects
@@ -231,65 +173,15 @@ function migrateSubjects() {
     }
 }
 
-// Supabase Client initialization
-function initSupabase() {
-    if (syncProvider !== 'supabase') return;
-    const url = localStorage.getItem(STORAGE_KEYS.SUPABASE_URL);
-    const key = localStorage.getItem(STORAGE_KEYS.SUPABASE_KEY);
-    if (url && key && typeof supabase !== 'undefined') {
-        try {
-            supabaseClient = supabase.createClient(url, key);
-            console.log("Supabase Sync Initialized Successfully");
-            if (syncStatusBadge) {
-                syncStatusBadge.className = 'sync-badge cloud';
-                syncStatusBadge.innerHTML = '<i class="fa-solid fa-cloud"></i> Supabase 已同步';
-            }
-        } catch (e) {
-            console.error("Failed to initialize Supabase:", e);
-            supabaseClient = null;
-            fallbackToLocalMode();
-        }
-    } else {
-        supabaseClient = null;
-        fallbackToLocalMode();
-    }
-}
-
-function fallbackToLocalMode() {
-    if (syncStatusBadge) {
-        syncStatusBadge.className = 'sync-badge local';
-        syncStatusBadge.innerHTML = '<i class="fa-solid fa-laptop"></i> 僅限本機';
-    }
-}
-
 function loadSettingsFromStorage() {
     const savedGeminiKey = localStorage.getItem(STORAGE_KEYS.API_KEY) || '';
-    const savedSupabaseUrl = localStorage.getItem(STORAGE_KEYS.SUPABASE_URL) || '';
-    const savedSupabaseKey = localStorage.getItem(STORAGE_KEYS.SUPABASE_KEY) || '';
-    
     if (apiKeyInput) apiKeyInput.value = savedGeminiKey;
-    if (supabaseUrlInput) supabaseUrlInput.value = savedSupabaseUrl;
-    if (supabaseKeyInput) supabaseKeyInput.value = savedSupabaseKey;
-    
-    const savedGoogleClientId = localStorage.getItem(STORAGE_KEYS.GOOGLE_CLIENT_ID) || '';
-    if (googleClientIdInput) googleClientIdInput.value = savedGoogleClientId;
     
     if (savedGeminiKey) {
         if (apiWarningDot) apiWarningDot.style.display = 'none';
     } else {
         if (apiWarningDot) apiWarningDot.style.display = 'block';
     }
-    
-    // Update Sync UI
-    const syncProviderBtns = document.querySelectorAll('.sync-provider-btn');
-    syncProviderBtns.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.provider === syncProvider);
-    });
-    
-    const supabaseSettingsPanel = document.getElementById('supabase-settings-panel');
-    const googleSettingsPanel = document.getElementById('google-settings-panel');
-    if (supabaseSettingsPanel) supabaseSettingsPanel.style.display = syncProvider === 'supabase' ? 'block' : 'none';
-    if (googleSettingsPanel) googleSettingsPanel.style.display = syncProvider === 'google' ? 'block' : 'none';
 }
 
 // Storage Helpers
@@ -329,91 +221,19 @@ async function loadFromStorage() {
     document.body.setAttribute('data-theme', savedTheme);
     
     updateTrashBadge();
-
-    // Supabase Cloud Sync Load
-    if (syncProvider === 'supabase' && supabaseClient) {
-        try {
-            console.log("Fetching folders, notebooks, and entries from Supabase...");
-            const { data: dbFolders, error: fError } = await supabaseClient.from('folders').select('*');
-            const { data: dbNotebooks, error: nError } = await supabaseClient.from('notebooks').select('*');
-            const { data: dbEntries, error: eError } = await supabaseClient.from('entries').select('*');
-            
-            if (fError) throw fError;
-            if (nError) throw nError;
-            if (eError) throw eError;
-            
-            if (dbFolders) folders = dbFolders;
-            if (dbNotebooks) {
-                notebooks = dbNotebooks;
-                notebooks.forEach(nb => {
-                    if (nb.folderId === undefined) nb.folderId = null;
-                    if (nb.isProtected === undefined) nb.isProtected = false;
-                });
-            }
-            if (dbEntries) entries = dbEntries;
-            
-            // Cache locally
-            localStorage.setItem(STORAGE_KEYS.FOLDERS, JSON.stringify(folders));
-            localStorage.setItem(STORAGE_KEYS.NOTEBOOKS, JSON.stringify(notebooks));
-            localStorage.setItem(STORAGE_KEYS.ENTRIES, JSON.stringify(entries));
-            console.log("Cloud sync load successful.");
-        } catch (err) {
-            console.warn("Cloud load failed, using local cache fallback:", err);
-        }
-    } else if (syncProvider === 'none') {
-        fallbackToLocalMode();
-    }
-    // Note: Google Drive Load is handled asynchronously by gapi callback to ensure valid token.
 }
 
 function saveNotebooksToStorage() {
     localStorage.setItem(STORAGE_KEYS.NOTEBOOKS, JSON.stringify(notebooks));
-    if (syncProvider === 'supabase' && supabaseClient) {
-        (async () => {
-            try {
-                const activeIds = notebooks.map(n => n.id);
-                if (activeIds.length > 0) {
-                    await supabaseClient.from('notebooks').delete().not('id', 'in', activeIds);
-                    await supabaseClient.from('notebooks').upsert(notebooks);
-                } else {
-                    await supabaseClient.from('notebooks').delete().neq('id', 'placeholder');
-                }
-            } catch (err) {
-                console.error("Notebook sync failed:", err);
-            }
-        })();
-    } else if (syncProvider === 'google') {
-        syncToGoogleDrive();
-    }
 }
 
 function saveEntriesToStorage() {
     localStorage.setItem(STORAGE_KEYS.ENTRIES, JSON.stringify(entries));
-    if (syncProvider === 'supabase' && supabaseClient) {
-        (async () => {
-            try {
-                const activeIds = entries.map(e => e.id);
-                if (activeIds.length > 0) {
-                    await supabaseClient.from('entries').delete().not('id', 'in', activeIds);
-                    await supabaseClient.from('entries').upsert(entries);
-                } else {
-                    await supabaseClient.from('entries').delete().neq('id', 'placeholder');
-                }
-            } catch (err) {
-                console.error("Entries sync failed:", err);
-            }
-        })();
-    } else if (syncProvider === 'google') {
-        syncToGoogleDrive();
-    }
 }
 
 function saveTrashToStorage() {
     localStorage.setItem(STORAGE_KEYS.TRASH_NOTEBOOKS, JSON.stringify(trashNotebooks));
     localStorage.setItem(STORAGE_KEYS.TRASH_ENTRIES, JSON.stringify(trashEntries));
-    if (syncProvider === 'google') {
-        syncToGoogleDrive();
-    }
 }
 
 function updateTrashBadge() {
@@ -2479,427 +2299,118 @@ function closeBulkRenameModal() {
     document.getElementById('bulk-rename-modal').style.display = 'none';
 }
 
-// --- Google Drive Sync Logic ---
-function gapiLoaded() {
-    if (typeof gapiLoadStarted === 'undefined') {
-        console.log('Google API script loaded before app.js, deferring initialization...');
-        return;
-    }
-    if (gapiLoadStarted) return;
-    gapiLoadStarted = true;
-    gapi.load('client', initializeGapiClient);
-}
-
-async function initializeGapiClient() {
+// --- Local Data Backup & Restore Logic ---
+function exportBackup() {
     try {
-        await gapi.client.init({
-            discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-        });
-        gapiInited = true;
-        checkGoogleAuth();
+        const backupData = {
+            version: '1.0',
+            timestamp: Date.now(),
+            data: {
+                notebooks: JSON.parse(localStorage.getItem(STORAGE_KEYS.NOTEBOOKS)) || [],
+                entries: JSON.parse(localStorage.getItem(STORAGE_KEYS.ENTRIES)) || [],
+                apiKey: localStorage.getItem(STORAGE_KEYS.API_KEY) || '',
+                model: localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-2.5-flash',
+                trashNotebooks: JSON.parse(localStorage.getItem(STORAGE_KEYS.TRASH_NOTEBOOKS)) || [],
+                trashEntries: JSON.parse(localStorage.getItem(STORAGE_KEYS.TRASH_ENTRIES)) || [],
+                theme: localStorage.getItem(STORAGE_KEYS.THEME) || 'classic',
+                folders: JSON.parse(localStorage.getItem(STORAGE_KEYS.FOLDERS)) || [],
+                subjects: JSON.parse(localStorage.getItem(STORAGE_KEYS.SUBJECTS)) || []
+            }
+        };
+
+        const jsonString = JSON.stringify(backupData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const hh = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        const ss = String(now.getSeconds()).padStart(2, '0');
+        const fileName = `will_ai_backup_${yyyy}${mm}${dd}_${hh}${min}${ss}.json`;
+
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
     } catch (e) {
-        console.error("GAPI Init Error:", e);
+        console.error("Backup export failed:", e);
+        alert("資料匯出失敗，請檢查瀏覽器儲存狀態。");
     }
 }
 
-function gisLoaded() {
-    if (typeof gisInited === 'undefined') {
-        console.log('Google Identity Services loaded before app.js, deferring initialization...');
-        return;
-    }
-    if (gisInited) return;
-    if (!googleClientId) return;
-    googleTokenClient = google.accounts.oauth2.initTokenClient({
-        client_id: googleClientId,
-        scope: 'https://www.googleapis.com/auth/drive.appdata',
-        callback: (tokenResponse) => {
-            if (tokenResponse.error !== undefined) {
-                console.error("Token Error:", tokenResponse);
-                // If silent refresh failed, show login overlay
-                if (tokenResponse.error === 'interaction_required' || tokenResponse.error === 'access_denied') {
-                    updateGoogleSyncStatus('登入逾期，請重新登入。', false);
-                    const overlay = document.getElementById('login-overlay');
-                    if (overlay) overlay.style.display = 'flex';
-                } else {
-                    updateGoogleSyncStatus('登入失敗，請稍後重試。', false);
-                }
-                pendingSyncAfterRefresh = false;
+function importBackup(file) {
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const backup = JSON.parse(e.target.result);
+            if (!backup || !backup.data) {
+                alert("匯入失敗：無效的備份檔案格式。");
                 return;
             }
-            googleAccessToken = tokenResponse.access_token;
-            localStorage.setItem(STORAGE_KEYS.GOOGLE_TOKEN, googleAccessToken);
-            // Token expires in 3600 seconds, refresh 5 min early
-            tokenExpiryTime = Date.now() + ((tokenResponse.expires_in || 3600) - 300) * 1000;
-            localStorage.setItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY, tokenExpiryTime);
-            updateGoogleSyncStatus('登入成功，正在從雲端載入資料...', true);
             
-            // Hide full-screen overlay when logged in successfully
-            const overlay = document.getElementById('login-overlay');
-            if (overlay) overlay.style.display = 'none';
-            
-            if (pendingSyncAfterRefresh) {
-                // If this was a silent refresh triggered by a failed sync, retry
-                pendingSyncAfterRefresh = false;
-                gapi.client.setToken({ access_token: googleAccessToken });
-                syncToGoogleDrive();
-            } else {
-                // CRITICAL FIX: Must load from drive on fresh login, not sync to it!
-                loadFromGoogleDrive();
+            const data = backup.data;
+            // Basic structural validation
+            if (!Array.isArray(data.notebooks) || !Array.isArray(data.entries)) {
+                alert("匯入失敗：備份檔案中缺乏核心筆記資料。");
+                return;
             }
-        },
-    });
-    gisInited = true;
-    checkGoogleAuth();
-}
 
-// Silently refresh the token without showing a popup (if possible)
-function silentTokenRefresh() {
-    if (!googleTokenClient) return false;
-    try {
-        pendingSyncAfterRefresh = true;
-        googleTokenClient.requestAccessToken({ prompt: '' }); // empty prompt = silent
-        return true;
-    } catch (e) {
-        pendingSyncAfterRefresh = false;
-        return false;
-    }
-}
+            const confirmMsg = "匯入備份將會覆蓋您目前的所有本機筆記、主題分類與設定，此動作無法復原。\n確定要進行匯入與覆蓋嗎？";
+            if (!confirm(confirmMsg)) return;
 
-// Check if token is expired or about to expire
-function isTokenExpiredOrExpiring() {
-    if (!googleAccessToken) return true;
-    if (!tokenExpiryTime) return false; // No expiry tracked yet, assume still valid
-    return Date.now() >= tokenExpiryTime;
-}
+            // Save elements to localStorage
+            localStorage.setItem(STORAGE_KEYS.NOTEBOOKS, JSON.stringify(data.notebooks));
+            localStorage.setItem(STORAGE_KEYS.ENTRIES, JSON.stringify(data.entries));
+            localStorage.setItem(STORAGE_KEYS.API_KEY, data.apiKey || '');
+            localStorage.setItem(STORAGE_KEYS.MODEL, data.model || 'gemini-2.5-flash');
+            localStorage.setItem(STORAGE_KEYS.TRASH_NOTEBOOKS, JSON.stringify(data.trashNotebooks || []));
+            localStorage.setItem(STORAGE_KEYS.TRASH_ENTRIES, JSON.stringify(data.trashEntries || []));
+            localStorage.setItem(STORAGE_KEYS.THEME, data.theme || 'classic');
+            localStorage.setItem(STORAGE_KEYS.FOLDERS, JSON.stringify(data.folders || []));
+            localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(data.subjects || []));
 
-function checkGoogleAuth() {
-    if (gapiInited && gisInited && syncProvider === 'google' && googleAccessToken) {
-        gapi.client.setToken({ access_token: googleAccessToken });
-        
-        // Hide full-screen overlay if we have a valid token
-        const overlay = document.getElementById('login-overlay');
-        if (overlay) overlay.style.display = 'none';
-        
-        if (isTokenExpiredOrExpiring()) {
-            console.log('[Auth] Token expired or expiring soon, attempting silent refresh...');
-            const refreshed = silentTokenRefresh();
-            if (refreshed) {
-                updateGoogleSyncStatus('正在更新雲端連線...', true);
-                return; // Will reload via callback on success
-            }
+            alert("備份資料已匯入成功！網頁即將重新載入以套用資料。");
+            location.reload();
+        } catch (err) {
+            console.error("Backup import failed:", err);
+            alert("匯入失敗：無法解析該備份 JSON 檔案。");
         }
-        
-        if (hasLoadedCloudThisSession) {
-            // Same session/device: just upload any local changes, don't overwrite with cloud
-            updateGoogleSyncStatus('已登入，正在同步本機資料到雲端...', true);
-            syncToGoogleDrive();
-        } else {
-            // New session (e.g. different device or first load): download from cloud
-            updateGoogleSyncStatus('自動從雲端載入最新資料...', true);
-            loadFromGoogleDrive().catch(async err => {
-                const status = err && (err.status || (err.result && err.result.error && err.result.error.code));
-                if (status === 401) {
-                    console.log('[Load] Token expired (401), attempting silent refresh...');
-                    const refreshed = silentTokenRefresh();
-                    if (refreshed) {
-                        updateGoogleSyncStatus('正在重新整理連線...', true);
-                        return; // Will reload via callback on success
-                    }
-                    
-                    localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN);
-                    localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY);
-                    googleAccessToken = null;
-                    tokenExpiryTime = null;
-                    updateGoogleSyncStatus('登入過期，請重新登入', false);
-                    if (overlay) overlay.style.display = 'flex';
-                } else {
-                    updateGoogleSyncStatus('載入雲端資料失敗，請檢查網路連線或重新整理頁面。', false);
-                }
-            });
-        }
-    } else {
-        // If not authenticated, make sure the overlay is visible
-        const overlay = document.getElementById('login-overlay');
-        if (overlay) overlay.style.display = 'flex';
-    }
+    };
+    reader.readAsText(file);
 }
 
-function updateGoogleSyncStatus(message, isSuccess = true) {
-    const statusEl = document.getElementById('google-sync-status');
-    if (statusEl) {
-        statusEl.textContent = message;
-        statusEl.className = `api-key-status ${isSuccess ? 'success' : 'error'}`;
-    }
-    const overlayStatusEl = document.getElementById('overlay-login-status');
-    if (overlayStatusEl) {
-        overlayStatusEl.textContent = message;
-        overlayStatusEl.className = `api-key-status ${isSuccess ? 'success' : 'error'}`;
-    }
-}
-
-async function syncToGoogleDrive() {
-    if (syncProvider !== 'google' || !googleAccessToken || !gapiInited) return;
-    if (isSyncingToGoogle) return;
-    
-    // Check if token is expired before attempting sync
-    if (isTokenExpiredOrExpiring()) {
-        console.log('[Sync] Token expired or expiring soon, attempting silent refresh...');
-        const refreshed = silentTokenRefresh();
-        if (refreshed) return; // Will retry after refresh via callback
-        // If refresh failed, proceed anyway and catch the error
-    }
-    
-    isSyncingToGoogle = true;
-    try {
-        const res = await gapi.client.drive.files.list({
-            spaces: 'appDataFolder',
-            q: "name='will_ai_sync.json'",
-            fields: 'files(id, name)'
-        });
-        
-        const files = res.result.files;
-        const fileId = files && files.length > 0 ? files[0].id : null;
-        
-        const syncData = {
-            subjects,
-            notebooks,
-            entries,
-            folders,
-            trashNotebooks,
-            trashEntries,
-            apiKey: localStorage.getItem(STORAGE_KEYS.API_KEY) || '',
-            model: localStorage.getItem(STORAGE_KEYS.MODEL) || 'gemini-2.5-flash',
-            theme: localStorage.getItem(STORAGE_KEYS.THEME) || 'classic'
-        };
-        
-        const fileContent = JSON.stringify(syncData);
-        const file = new Blob([fileContent], { type: 'application/json' });
-        const metadata = {
-            name: 'will_ai_sync.json',
-            parents: ['appDataFolder']
-        };
-        
-        const accessToken = gapi.client.getToken().access_token;
-        const form = new FormData();
-        
-        if (fileId) {
-            form.append('metadata', new Blob([JSON.stringify({})], { type: 'application/json' }));
-            form.append('file', file);
-            
-            await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=multipart`, {
-                method: 'PATCH',
-                headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-                body: form
-            });
-        } else {
-            form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-            form.append('file', file);
-            
-            await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-                method: 'POST',
-                headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
-                body: form
-            });
-        }
-        
-        if (syncStatusBadge) {
-            syncStatusBadge.className = 'sync-badge cloud';
-            syncStatusBadge.innerHTML = '<i class="fa-brands fa-google-drive"></i> Google 雲端已同步';
-        }
-        updateGoogleSyncStatus('雲端備份已更新！', true);
-        
-    } catch (err) {
-        console.error("Google Drive Sync Error:", err);
-        // If 401 (token expired), try silent refresh and retry once
-        const status = err && (err.status || (err.result && err.result.error && err.result.error.code));
-        if (status === 401) {
-            console.log('[Sync] 401 detected, attempting silent token refresh...');
-            googleAccessToken = null;
-            tokenExpiryTime = null;
-            localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN);
-            localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY);
-            const refreshed = silentTokenRefresh();
-            if (!refreshed) {
-                updateGoogleSyncStatus('登入逾期，請重新登入。', false);
-                const overlay = document.getElementById('login-overlay');
-                if (overlay) overlay.style.display = 'flex';
-            } else {
-                updateGoogleSyncStatus('Token 已更新，正在重新同步...', true);
-            }
-        } else {
-            updateGoogleSyncStatus('同步失敗，請檢查網路連線或重新登入。', false);
-            if (syncStatusBadge) {
-                syncStatusBadge.className = 'sync-badge error';
-                syncStatusBadge.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> 同步失敗';
-            }
-        }
-    } finally {
-        isSyncingToGoogle = false;
-    }
-}
-
-// Force sync button
+// Bind Backup UI elements on DOMContentLoaded
 document.addEventListener('DOMContentLoaded', () => {
-    const forceSyncBtn = document.getElementById('force-sync-btn');
-    if (forceSyncBtn) {
-        forceSyncBtn.addEventListener('click', async () => {
-            if (syncProvider !== 'google' || !googleAccessToken) {
-                alert('尚未登入 Google，無法強制同步。請先登入。');
-                return;
-            }
-            forceSyncBtn.disabled = true;
-            forceSyncBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up fa-bounce"></i> 上傳中...';
-            await syncToGoogleDrive();
-            forceSyncBtn.disabled = false;
-            forceSyncBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up"></i> 強制上傳到雲端';
+    const exportBackupBtn = document.getElementById('export-backup-btn');
+    const importBackupBtn = document.getElementById('import-backup-btn');
+    const backupFileInput = document.getElementById('backup-file-input');
+
+    if (exportBackupBtn) {
+        exportBackupBtn.addEventListener('click', exportBackup);
+    }
+    if (importBackupBtn && backupFileInput) {
+        importBackupBtn.addEventListener('click', () => {
+            backupFileInput.click();
         });
     }
-    
-    const forcePullBtn = document.getElementById('force-pull-btn');
-    if (forcePullBtn) {
-        forcePullBtn.addEventListener('click', async () => {
-            if (syncProvider !== 'google' || !googleAccessToken) {
-                alert('尚未登入 Google，無法下載雲端資料。請先登入。');
-                return;
+    if (backupFileInput) {
+        backupFileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                importBackup(e.target.files[0]);
+                // Clear input so user can import the same file again if needed
+                e.target.value = '';
             }
-            if (!confirm('確定要從雲端下載最新資料嗎？這將會以雲端版本覆蓋您目前的本機資料。')) return;
-            forcePullBtn.disabled = true;
-            forcePullBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down fa-bounce"></i> 下載中...';
-            // Clear session flag to force a fresh download
-            hasLoadedCloudThisSession = false;
-            sessionStorage.removeItem(SESSION_KEY);
-            await loadFromGoogleDrive();
-            forcePullBtn.disabled = false;
-            forcePullBtn.innerHTML = '<i class="fa-solid fa-cloud-arrow-down"></i> 從雲端下載最新資料';
-        });
-    }
-    
-    const googleLogoutBtn = document.getElementById('google-logout-btn');
-    if (googleLogoutBtn) {
-        googleLogoutBtn.addEventListener('click', () => {
-            if (!confirm('確定要登出 Google 帳號嗎？登出後將返回登入畫面，本機資料仍會保留。')) return;
-            
-            // Revoke Google OAuth token
-            if (googleAccessToken) {
-                try {
-                    google.accounts.oauth2.revoke(googleAccessToken, () => {
-                        console.log('Google Access Token Revoked');
-                    });
-                } catch (e) {
-                    console.error('Error revoking Google Access Token:', e);
-                }
-            }
-            
-            // Clear credentials and variables
-            googleAccessToken = null;
-            tokenExpiryTime = null;
-            hasLoadedCloudThisSession = false;
-            
-            localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN);
-            localStorage.removeItem(STORAGE_KEYS.GOOGLE_TOKEN_EXPIRY);
-            sessionStorage.removeItem(SESSION_KEY);
-            
-            // Update UI status
-            updateGoogleSyncStatus('已登出 Google 帳號。', false);
-            if (syncStatusBadge) {
-                syncStatusBadge.className = 'sync-badge local';
-                syncStatusBadge.innerHTML = '<i class="fa-solid fa-folder"></i> 本地儲存';
-            }
-            
-            // Hide settings modal and show login overlay
-            const settingsModal = document.getElementById('settings-modal');
-            if (settingsModal) settingsModal.style.display = 'none';
-            
-            const overlay = document.getElementById('login-overlay');
-            if (overlay) overlay.style.display = 'flex';
         });
     }
 });
-
-async function loadFromGoogleDrive() {
-    if (syncProvider !== 'google' || !googleAccessToken || !gapiInited) return;
-    
-    try {
-        const res = await gapi.client.drive.files.list({
-            spaces: 'appDataFolder',
-            q: "name='will_ai_sync.json'",
-            fields: 'files(id, name)'
-        });
-        
-        const files = res.result.files;
-        if (files && files.length > 0) {
-            const fileId = files[0].id;
-            const fileRes = await gapi.client.drive.files.get({
-                fileId: fileId,
-                alt: 'media'
-            });
-            
-            let data = fileRes.result;
-            if (typeof data === 'string') {
-                try {
-                    data = JSON.parse(data);
-                } catch (e) {
-                    console.error("JSON parsing of downloaded data failed:", e);
-                }
-            }
-            if (data) {
-                if (data.subjects) subjects = data.subjects;
-                if (data.notebooks) notebooks = data.notebooks;
-                if (data.entries) entries = data.entries;
-                if (data.folders) folders = data.folders;
-                if (data.trashNotebooks) trashNotebooks = data.trashNotebooks;
-                if (data.trashEntries) trashEntries = data.trashEntries;
-                
-                migrateSubjects();
-                
-                localStorage.setItem(STORAGE_KEYS.SUBJECTS, JSON.stringify(subjects));
-                localStorage.setItem(STORAGE_KEYS.FOLDERS, JSON.stringify(folders));
-                localStorage.setItem(STORAGE_KEYS.NOTEBOOKS, JSON.stringify(notebooks));
-                localStorage.setItem(STORAGE_KEYS.ENTRIES, JSON.stringify(entries));
-                localStorage.setItem(STORAGE_KEYS.TRASH_NOTEBOOKS, JSON.stringify(trashNotebooks));
-                localStorage.setItem(STORAGE_KEYS.TRASH_ENTRIES, JSON.stringify(trashEntries));
-                
-                if (data.apiKey) {
-                    localStorage.setItem(STORAGE_KEYS.API_KEY, data.apiKey);
-                    if (apiKeyInput) apiKeyInput.value = data.apiKey;
-                    if (apiWarningDot) apiWarningDot.style.display = 'none';
-                }
-                if (data.model) {
-                    localStorage.setItem(STORAGE_KEYS.MODEL, data.model);
-                    if (modelSelect) modelSelect.value = data.model;
-                }
-                if (data.theme) {
-                    localStorage.setItem(STORAGE_KEYS.THEME, data.theme);
-                    document.body.setAttribute('data-theme', data.theme);
-                }
-                
-                if (typeof updateModelDetails === 'function') updateModelDetails();
-                renderSubjectsList();
-                renderNotebooksList();
-                updateWorkspaceView();
-                updateTrashBadge();
-                renderTrashList();
-                
-                // Mark that we've loaded cloud data in this session
-                hasLoadedCloudThisSession = true;
-                sessionStorage.setItem(SESSION_KEY, 'true');
-                
-                if (syncStatusBadge) {
-                    syncStatusBadge.className = 'sync-badge cloud';
-                    syncStatusBadge.innerHTML = '<i class="fa-brands fa-google-drive"></i> Google 雲端已同步';
-                }
-                updateGoogleSyncStatus('已成功從雲端載入資料！', true);
-            }
-        } else {
-            updateGoogleSyncStatus('尚未有雲端備份，將在下次變動時建立。', true);
-            if (notebooks.length > 0) {
-                syncToGoogleDrive();
-            }
-        }
-    } catch (err) {
-        throw err;
-    }
-}
 
 // --- Event Listeners Registration ---
 
@@ -2907,22 +2418,6 @@ async function loadFromGoogleDrive() {
 // Unified Settings Save
 if (saveSettingsBtn) {
     saveSettingsBtn.addEventListener('click', async () => {
-        if (googleClientIdInput) {
-            const newClientId = googleClientIdInput.value.trim();
-            const oldClientId = localStorage.getItem(STORAGE_KEYS.GOOGLE_CLIENT_ID) || '';
-            if (newClientId !== oldClientId) {
-                if (newClientId) {
-                    localStorage.setItem(STORAGE_KEYS.GOOGLE_CLIENT_ID, newClientId);
-                } else {
-                    localStorage.removeItem(STORAGE_KEYS.GOOGLE_CLIENT_ID);
-                }
-                googleClientId = newClientId || DEFAULT_GOOGLE_CLIENT_ID;
-                alert('Google Client ID 已儲存！網頁將自動重新整理以套用新設定。');
-                location.reload();
-                return;
-            }
-        }
-        
         const key = apiKeyInput.value.trim();
         
         if (key) {
@@ -2939,11 +2434,7 @@ if (saveSettingsBtn) {
         
         if (settingsStatus) {
             settingsStatus.className = 'api-key-status success';
-            settingsStatus.textContent = '設定儲存成功！正在連線載入雲端資料...';
-        }
-        
-        if (syncProvider === 'google') {
-            syncToGoogleDrive();
+            settingsStatus.textContent = '設定儲存成功！';
         }
         
         await loadFromStorage();
@@ -2953,7 +2444,7 @@ if (saveSettingsBtn) {
         
         setTimeout(() => {
             if (settingsStatus) settingsStatus.textContent = '';
-            if (settingsModal) settingsModal.style.display = 'none';
+            closeSettingsModal();
         }, 1200);
     });
 }
@@ -2967,34 +2458,7 @@ if (modelSelect) {
     });
 }
 
-// Sync Provider Logic (Google Only)
-const googleLoginBtn = document.getElementById('google-login-btn');
-const overlayGoogleLoginBtn = document.getElementById('overlay-google-login-btn');
 
-const handleGoogleLogin = () => {
-    if (!googleClientId) {
-        alert('請先在設定中輸入您個人的 Google Client ID 才能使用 Google 登入功能！');
-        return;
-    }
-    
-    // If not initialized yet, try to initialize it now
-    if (!googleTokenClient && typeof google !== 'undefined' && google.accounts) {
-        gisLoaded();
-    }
-    
-    if (googleTokenClient) {
-        googleTokenClient.requestAccessToken({prompt: 'consent'});
-    } else {
-        alert('Google 登入服務仍在載入中或被瀏覽器阻擋，請稍候再試。若持續發生，請檢查是否有阻擋廣告的擴充功能，或重新整理頁面。');
-    }
-};
-
-if (googleLoginBtn) {
-    googleLoginBtn.addEventListener('click', handleGoogleLogin);
-}
-if (overlayGoogleLoginBtn) {
-    overlayGoogleLoginBtn.addEventListener('click', handleGoogleLogin);
-}
 
 if (toggleApiKeyBtn) {
     toggleApiKeyBtn.addEventListener('click', () => {
@@ -3861,13 +3325,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderNotebooksList();
     updateWorkspaceView();
 
-    // Check if Google APIs loaded before app.js executed
-    if (typeof gapi !== 'undefined') {
-        gapiLoaded();
-    }
-    if (typeof google !== 'undefined' && typeof google.accounts !== 'undefined') {
-        gisLoaded();
-    }
+
     
     // Bind context menu listener to notebooks list
     if (notebooksList) {

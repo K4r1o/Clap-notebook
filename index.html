@@ -27,26 +27,6 @@
     <link rel="stylesheet" href="style.css?v=16">
 </head>
 <body>
-    <!-- Mandatory Login Overlay -->
-    <div id="login-overlay" class="login-overlay" style="display: flex;">
-        <div class="login-overlay-content">
-            <i class="fa-solid fa-book-open logo-icon-large"></i>
-            <h1>Will.ai</h1>
-            <p class="subtitle-large">Capture the whisper. Command the rest.</p>
-            <p class="login-description">
-                為了確保您的靈感與筆記永不遺失，Will.ai 已全面採用雲端同步架構。<br>
-                所有筆記將加密並安全儲存於您個人的 Google 雲端硬碟隱藏資料夾中。
-            </p>
-            <button id="overlay-google-login-btn" class="btn btn-primary login-btn-large">
-                <i class="fa-brands fa-google"></i> 使用 Google 帳號登入並開始
-            </button>
-            <div id="overlay-login-status" class="api-key-status" style="margin-top: 16px; min-height: 20px;"></div>
-            <p class="settings-tip" style="margin-top: 24px; font-size: 0.8rem; color: rgba(255, 255, 255, 0.6);">
-                ※ 首次登入若出現 Google 安全警告，請點選「進階」➡️「繼續前往 Will.ai」即可正常使用。<br>
-                本程式絕不收集您的個人隱私。
-            </p>
-        </div>
-    </div>
 
     <!-- Mobile Navigation Backdrop -->
     <div id="mobile-nav-backdrop" class="mobile-nav-backdrop" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 900; opacity: 0; transition: opacity 0.3s ease;"></div>
@@ -95,9 +75,7 @@
                         <button id="delete-subject-btn" class="danger" style="width: 100%; background: none; border: none; padding: 10px 16px; text-align: left; color: #ff6b6b; font-size: 0.85rem; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: var(--transition);"><i class="fa-solid fa-trash-can" style="width: 14px;"></i> 刪除主題</button>
                     </div>
                 </div>
-                <div id="sync-status-badge" class="sync-badge local" style="margin-top: 8px; align-self: flex-start; margin-left: 4px;">
-                    <i class="fa-solid fa-folder"></i> 本地儲存
-                </div>
+
             </div>
 
 
@@ -403,33 +381,19 @@
                     </div>
                 </div>
                 <hr class="modal-divider">
-                <div class="google-client-id-container-modal">
-                    <label for="google-client-id-input" class="modal-label">
-                        <i class="fa-brands fa-google"></i> Google Client ID 設定
-                    </label>
-                    <p class="settings-tip">自架或本機測試時若出現 400 錯誤，可在此設定自訂的 Client ID。留空則使用預設。</p>
-                    <div class="input-group-modal">
-                        <input type="text" id="google-client-id-input" placeholder="輸入 Google OAuth Client ID..." autocomplete="off">
-                    </div>
-                </div>
-                <hr class="modal-divider">
-                <div class="sync-container-modal">
+                <div class="backup-container-modal">
                     <label class="modal-label">
-                        <i class="fa-solid fa-cloud"></i> 雲端同步狀態
+                        <i class="fa-solid fa-file-shield"></i> 資料備份與還原
                     </label>
-                    <div id="google-sync-status" class="api-key-status" style="margin-top: 8px; text-align: left; color: #8ed081;">
-                        <i class="fa-solid fa-cloud-arrow-down"></i> 已與 Google 雲端硬碟同步中...
-                    </div>
+                    <p class="settings-tip">將您的所有筆記本、隨筆內容、主題分類與設定下載為備份檔案，或將舊備份檔匯入還原（匯入將會完全覆蓋目前的本機資料）。</p>
                     <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px;">
-                        <button id="force-sync-btn" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 8px 14px;">
-                            <i class="fa-solid fa-cloud-arrow-up"></i> 強制上傳到雲端
+                        <button id="export-backup-btn" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 8px 14px; background: rgba(100,200,100,0.15); color: #8ed081; border-color: rgba(100,200,100,0.3);">
+                            <i class="fa-solid fa-file-export"></i> 匯出完整備份檔 (.json)
                         </button>
-                        <button id="force-pull-btn" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 8px 14px; background: rgba(100,180,255,0.15);">
-                            <i class="fa-solid fa-cloud-arrow-down"></i> 從雲端下載最新資料
+                        <button id="import-backup-btn" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 8px 14px; background: rgba(100,180,255,0.15); color: #64b4ff; border-color: rgba(100,180,255,0.3);">
+                            <i class="fa-solid fa-file-import"></i> 匯入備份檔案
                         </button>
-                        <button id="google-logout-btn" class="btn btn-secondary" style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; padding: 8px 14px; background: rgba(220,100,100,0.15); color: #ff6b6b; border-color: rgba(220,100,100,0.3);">
-                            <i class="fa-solid fa-right-from-bracket"></i> 登出 Google 帳號
-                        </button>
+                        <input type="file" id="backup-file-input" accept=".json" style="display: none;">
                     </div>
                 </div>
                 
@@ -652,9 +616,6 @@
             });
         }
     </script>
-    <!-- Google Identity Services -->
-    <script src="https://accounts.google.com/gsi/client" async defer onload="gisLoaded()"></script>
-    <!-- Google APIs -->
-    <script src="https://apis.google.com/js/api.js" async defer onload="gapiLoaded()"></script>
+
 </body>
 </html>
